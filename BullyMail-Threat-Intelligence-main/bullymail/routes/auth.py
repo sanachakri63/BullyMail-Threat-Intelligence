@@ -1,0 +1,1035 @@
+import os
+import time
+import re
+import secrets
+from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template, make_response, current_app
+from ..models.user import UserModel
+from ..models.institution import InstitutionModel
+from ..services.rate_limiter import auth_rate_limiter
+from ..services.auth_token_service import AuthTokenService
+from ..services.auth_email_service import auth_email_service
+from ..services.captcha_service import CaptchaService
+
+auth_bp = Blueprint('auth', __name__)
+
+INACTIVITY_TIMEOUT_SECONDS = 600  # 10 minutes session inactivity timeout
+
+def _get_client_ip():
+    """Extracts client IP considering potential proxy forwarding."""
+    forwarded = request.headers.get('X-Forwarded-For')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.remote_addr or '127.0.0.1'
+
+# =========================================================================
+# 1. SIGNUP & REGISTRATION
+# =========================================================================
+
+@auth_bp.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        client_ip = _get_client_ip()
+
+        # Support JSON & Form payloads
+        if request.is_json:
+            data = request.get_json() or {}
+            username = (data.get('username') or '').strip()
+            full_name = (data.get('full_name') or data.get('admin_name') or '').strip()
+            email = (data.get('email') or '').strip()
+            password = data.get('password') or ''
+            confirm_password = data.get('confirm_password') or ''
+            captcha_token = data.get('captcha_token') or ''
+            requested_inst_name = (data.get('organization_name') or data.get('institution_name') or data.get('requested_institution_name') or '').strip()
+            requested_inst_domain = (data.get('organization_domain') or data.get('institution_domain') or data.get('requested_institution_domain') or '').strip()
+            requested_inst_type = (data.get('organization_type') or data.get('org_type') or 'university').strip().lower()
+        else:
+            username = (request.form.get('username') or '').strip()
+            full_name = (request.form.get('full_name') or request.form.get('admin_name') or '').strip()
+            email = (request.form.get('email') or '').strip()
+            password = request.form.get('password') or ''
+            confirm_password = request.form.get('confirm_password') or ''
+            captcha_token = request.form.get('captcha_token') or ''
+            requested_inst_name = (request.form.get('organization_name') or request.form.get('institution_name') or request.form.get('requested_institution_name') or '').strip()
+            requested_inst_domain = (request.form.get('organization_domain') or request.form.get('institution_domain') or request.form.get('requested_institution_domain') or '').strip()
+            requested_inst_type = (request.form.get('organization_type') or request.form.get('org_type') or 'university').strip().lower()
+
+        # Rate Limit Check
+        is_locked, retry_after = auth_rate_limiter.is_locked(client_ip, email, action='signup')
+        if is_locked:
+            minutes = max(1, (retry_after + 59) // 60)
+            err_msg = f"Too many registration requests from this source. Please try again in {minutes} minute(s)."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg, 'retry_after': retry_after}), 429
+            return render_template('signup.html', error=err_msg), 429
+
+        # CAPTCHA Check if required
+        if CaptchaService.is_enabled() or auth_rate_limiter.requires_captcha(client_ip, email, action='signup'):
+            valid_cap, cap_err = CaptchaService.verify_token(captcha_token, client_ip)
+            if not valid_cap:
+                auth_rate_limiter.record_failure(client_ip, email, action='signup')
+                if request.is_json:
+                    return jsonify({'success': False, 'error': cap_err}), 400
+                return render_template('signup.html', error=cap_err), 400
+
+        # Input Validations
+        if not username or not email or not password:
+            if request.is_json:
+                return jsonify({'success': False, 'error': 'All fields are required.'}), 400
+            return render_template('signup.html', error='All fields are required.'), 400
+
+        if not UserModel.validate_email_format(email):
+            if request.is_json:
+                return jsonify({'success': False, 'error': 'Please provide a valid email address.'}), 400
+            return render_template('signup.html', error='Please provide a valid email address.'), 400
+
+        is_match, match_err = UserModel.validate_password_confirmation(password, confirm_password)
+        if not is_match:
+            if request.is_json:
+                return jsonify({'success': False, 'error': match_err}), 400
+            return render_template('signup.html', error=match_err), 400
+
+        is_valid_pw, pw_err = UserModel.validate_password_policy(password)
+        if not is_valid_pw:
+            if request.is_json:
+                return jsonify({'success': False, 'error': pw_err}), 400
+            return render_template('signup.html', error=pw_err), 400
+
+        # Uniform Account Creation & User Enumeration Defense
+        clean_email = UserModel.normalize_email(email)
+        existing_user_email = UserModel.get_by_email(clean_email)
+        existing_user_name = UserModel.get_by_username(username)
+
+        # Standard anti-enumeration response
+        success_msg = (
+            "Registration submitted successfully! If this email is eligible for an account, "
+            "a verification link has been dispatched to your inbox. Please check your email to activate access."
+        )
+
+        if existing_user_name and not existing_user_email:
+            auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
+            err_msg = "This username is already taken. Please choose a different username."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg}), 400
+            return render_template('signup.html', error=err_msg), 400
+
+        try:
+            # Resolve or provision pending institution
+            target_inst_id = None
+            raw_org_name = (requested_inst_name or '').strip()
+            raw_org_domain = (requested_inst_domain or '').strip().lower()
+
+            PUBLIC_EMAIL_DOMAINS = {
+                'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com',
+                'icloud.com', 'live.com', 'aol.com', 'proton.me', 'protonmail.com', 'mail.com'
+            }
+            email_domain = clean_email.split('@')[-1] if '@' in clean_email else ''
+
+            if raw_org_domain:
+                candidate_domain = raw_org_domain
+            elif email_domain and email_domain not in PUBLIC_EMAIL_DOMAINS:
+                candidate_domain = email_domain
+            else:
+                clean_slug = re.sub(r'[^a-z0-9]', '', (raw_org_name or username).lower())[:30]
+                if not clean_slug:
+                    clean_slug = f"org{int(time.time())}"
+                candidate_domain = f"{clean_slug}.org"
+
+            resolved_org_name = raw_org_name or (f"{candidate_domain.split('.')[0].capitalize()} Organization")
+
+            try:
+                existing_inst = InstitutionModel.get_by_domain(candidate_domain)
+                if existing_inst:
+                    if existing_inst.get('status') in ('PENDING_APPROVAL', 'REJECTED'):
+                        target_inst_id = existing_inst['id']
+                        InstitutionModel.update_status(target_inst_id, 'PENDING_APPROVAL')
+                    elif existing_inst.get('status') == 'ACTIVE' and raw_org_name and existing_inst.get('name', '').lower() == raw_org_name.lower():
+                        target_inst_id = existing_inst['id']
+                    else:
+                        import secrets
+                        unique_domain = f"{candidate_domain.split('.')[0]}-{secrets.token_hex(2)}.org"
+                        target_inst_id = InstitutionModel.create_institution(
+                            name=resolved_org_name,
+                            domain=unique_domain,
+                            org_type=requested_inst_type,
+                            contact_name=full_name or username,
+                            contact_email=clean_email,
+                            status='PENDING_APPROVAL'
+                        )
+                else:
+                    target_inst_id = InstitutionModel.create_institution(
+                        name=resolved_org_name,
+                        domain=candidate_domain,
+                        org_type=requested_inst_type,
+                        contact_name=full_name or username,
+                        contact_email=clean_email,
+                        status='PENDING_APPROVAL'
+                    )
+            except Exception as inst_ex:
+                import logging
+                logging.getLogger("bullymail.auth").error(f"[SIGNUP ORG] Could not create pending institution: {inst_ex}", exc_info=True)
+
+            user_id = None
+
+            if existing_user_email:
+                user_status = (existing_user_email.get('status') or '').upper()
+
+                # If user is already active/approved, return uniform enumeration defense in JSON or helpful note in HTML
+                if user_status in ('ACTIVE', 'APPROVED'):
+                    UserModel.hash_password(password)
+                    auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
+                    if request.is_json:
+                        return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_VERIFICATION'})
+                    return render_template('signup.html', error="An active account with this email address already exists. Please sign in or reset your password.")
+
+                # If user has already verified email and is awaiting admin approval
+                if user_status == 'PENDING_ADMIN_APPROVAL':
+                    auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
+                    pending_admin_msg = (
+                        "Your email has already been verified! Your organization application is currently "
+                        "pending administrator approval. You will receive access once approved by the platform owner."
+                    )
+                    if request.is_json:
+                        return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_ADMIN_APPROVAL'})
+                    return render_template('signup.html', success=pending_admin_msg)
+
+                # User is in PENDING_EMAIL_VERIFICATION or REJECTED:
+                # Check username collision with OTHER users
+                if existing_user_name and existing_user_name.get('id') != existing_user_email.get('id'):
+                    err_msg = "This username is already taken. Please choose a different username."
+                    if request.is_json:
+                        return jsonify({'success': False, 'error': err_msg}), 400
+                    return render_template('signup.html', error=err_msg), 400
+
+                user_id = existing_user_email['id']
+                UserModel.reapply_user_registration(
+                    user_id=user_id,
+                    new_password=password,
+                    username=username,
+                    full_name=full_name or username,
+                    requested_institution_name=resolved_org_name,
+                    requested_institution_domain=candidate_domain
+                )
+            else:
+                user_id = UserModel.create_user(
+                    username=username,
+                    password=password,
+                    email=clean_email,
+                    role='org_admin',
+                    status='PENDING_EMAIL_VERIFICATION',
+                    institution_id=None,
+                    requested_institution_name=resolved_org_name,
+                    requested_institution_domain=candidate_domain,
+                    full_name=full_name or username
+                )
+                if not user_id:
+                    existing = UserModel.get_by_email(clean_email) or UserModel.get_by_username(username)
+                    if existing:
+                        user_id = existing.get('id')
+
+            # Generate single-use verification token
+            raw_token = AuthTokenService.generate_email_verification_token(user_id)
+            verify_url = auth_email_service.get_verification_url(raw_token)
+            import logging
+            auth_logger = logging.getLogger("bullymail.auth")
+            masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
+            auth_logger.info(f"[REGISTRATION EMAIL] Registration processed (user_id={user_id}). Dispatching verification email to recipient={masked_email}")
+
+            email_result = auth_email_service.send_verification_email(clean_email, raw_token, username)
+            if isinstance(email_result, tuple):
+                email_sent, email_message = email_result
+            else:
+                email_sent, email_message = bool(email_result), ""
+
+            if not email_sent:
+                auth_logger.error(
+                    f"[REGISTRATION EMAIL] [FINAL_RESULT] FAILED for {masked_email}: {email_message}"
+                )
+                auth_logger.info(
+                    f"[REGISTRATION EMAIL] [ACTIVATION_LINK] User {masked_email} activation URL: {verify_url}"
+                )
+                auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
+                fail_msg = "Your account was created, but we could not send the verification email. Please try again."
+                if request.is_json:
+                    return jsonify({'success': False, 'error': fail_msg, 'status': 'PENDING_EMAIL_VERIFICATION', 'verification_url': verify_url}), 500
+                return render_template('signup.html', error=fail_msg, verification_link=verify_url), 500
+
+            auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS for {masked_email}")
+            auth_rate_limiter.record_success(client_ip, clean_email, action='signup')
+            if request.is_json:
+                return jsonify({
+                    'success': True,
+                    'message': success_msg,
+                    'status': 'PENDING_VERIFICATION',
+                    'verification_url': verify_url
+                })
+            return render_template('signup.html', success=success_msg, verification_link=verify_url)
+        except Exception as ex:
+            import logging
+            logging.getLogger("bullymail.auth").error(f"[SIGNUP ERROR] Account creation exception for {clean_email}: {ex}", exc_info=True)
+            auth_rate_limiter.record_failure(client_ip, clean_email, action='signup')
+            err_msg = "An error occurred during account creation. Please try again."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg}), 500
+            return render_template('signup.html', error=err_msg), 500
+
+    return render_template('signup.html')
+
+# =========================================================================
+from functools import wraps
+
+def normalize_role(role, has_organization=False):
+    """Normalizes role strings to canonical names supporting SUPER_ADMIN, ORGANIZATION_ADMIN, etc."""
+    r = str(role or '').lower().strip()
+    if r in ('super_admin', 'platform_owner', 'superadmin'):
+        return 'platform_owner'
+    if r in ('organization_admin', 'org_admin', 'orgadmin'):
+        return 'org_admin'
+    if r == 'admin':
+        return 'org_admin' if has_organization else 'platform_owner'
+    if r in ('organization_analyst', 'analyst', 'operator', 'staff'):
+        return 'analyst'
+    if r in ('organization_member', 'member', 'student', 'faculty', 'employee'):
+        return 'analyst'
+    return r
+
+class AuthUser(dict):
+    """
+    Canonical authenticated user context representation.
+    Provides standard object-attribute access (current_user.id, current_user.role, current_user.organization_id)
+    as well as full dictionary backward compatibility (current_user['institution_id'], etc.).
+    """
+    def __init__(self, data=None, **kwargs):
+        super().__init__(data or {}, **kwargs)
+        org_id = self.get('organization_id') or self.get('institution_id')
+        if org_id is not None:
+            try:
+                org_id = int(org_id)
+            except (ValueError, TypeError):
+                pass
+        self['organization_id'] = org_id
+        self['institution_id'] = org_id
+
+        raw_role = self.get('role')
+        canonical = normalize_role(raw_role, has_organization=(org_id is not None))
+        self['role'] = canonical
+
+    @property
+    def id(self):
+        return self.get('id')
+
+    @property
+    def username(self):
+        return self.get('username')
+
+    @property
+    def email(self):
+        return self.get('email')
+
+    @property
+    def full_name(self):
+        return self.get('full_name') or self.get('username')
+
+    @property
+    def role(self):
+        return self.get('role')
+
+    @property
+    def organization_id(self):
+        return self.get('organization_id')
+
+    @property
+    def institution_id(self):
+        return self.get('organization_id')
+
+    @property
+    def is_super_admin(self):
+        return self.get('role') in ('platform_owner', 'super_admin')
+
+    @property
+    def is_platform_owner(self):
+        return self.is_super_admin
+
+    @property
+    def is_org_admin(self):
+        return self.get('role') in ('org_admin', 'organization_admin')
+
+    @property
+    def is_analyst(self):
+        return not self.is_super_admin and not self.is_org_admin and not self.is_member
+
+    @property
+    def is_member(self):
+        raw_role = str(self.get('role') or '').lower().strip()
+        return raw_role in ('member', 'organization_member', 'student', 'faculty', 'staff', 'employee')
+
+
+def get_current_user():
+    """
+    Retrieves fresh user data from DB using session['user_id'].
+    Enforces strict 10-minute inactivity session expiration.
+    Prevents stale role vulnerabilities and immediately blocks disabled/unapproved/suspended users.
+    Returns AuthUser or None.
+    """
+    user_id = session.get('user_id')
+    if not user_id:
+        return None
+
+    # Enforce 10-minute session inactivity timeout
+    now = time.time()
+    last_activity = session.get('last_activity')
+    if last_activity is not None:
+        try:
+            if (now - float(last_activity)) > INACTIVITY_TIMEOUT_SECONDS:
+                session.clear()
+                session.modified = True
+                return None
+        except (ValueError, TypeError):
+            pass
+
+    user = UserModel.get_by_id(user_id)
+    if not user or user.get('status') != 'ACTIVE':
+        session.clear()
+        return None
+
+    auth_user = AuthUser(user)
+
+    # For tenant users, verify organization is also ACTIVE
+    if not auth_user.is_super_admin and auth_user.organization_id:
+        from ..models.institution import InstitutionModel
+        inst = InstitutionModel.get_by_id(auth_user.organization_id)
+        if not inst or (inst.get('status') or '').upper() not in ('ACTIVE', 'APPROVED'):
+            session.clear()
+            return None
+
+    # Sliding session activity window: do not update if request is automated background polling
+    if not request.headers.get('X-Background-Poll'):
+        session['last_activity'] = now
+
+    return auth_user
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Unauthorized or account pending approval'}), 401
+            session.clear()
+            return redirect(url_for('auth.login'))
+        return f(user, *args, **kwargs)
+    return decorated
+
+def require_authenticated_user(f):
+    """Requires an authenticated active user context (Alias for require_auth)."""
+    return require_auth(f)
+
+def require_platform_owner(f):
+    """Restricts endpoint access STRICTLY to the Platform Owner (Jaya Chandra Vennam) / Super Admin."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+            session.clear()
+            return redirect(url_for('auth.login'))
+        if not (user.is_super_admin if hasattr(user, 'is_super_admin') else (normalize_role(user.get('role')) == 'platform_owner')):
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Forbidden: Platform Owner access required'}), 403
+            return render_template('login.html', error="Forbidden: Platform Owner access required."), 403
+        return f(user, *args, **kwargs)
+    return decorated
+
+def require_super_admin(f):
+    """Restricts endpoint access STRICTLY to the Platform Owner (Jaya Chandra Vennam) / Super Admin."""
+    return require_platform_owner(f)
+
+def require_organization_admin(f):
+    """Restricts endpoint access strictly to Organization Admin or Super Admin."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+            session.clear()
+            return redirect(url_for('auth.login'))
+        is_allowed = (user.is_org_admin or user.is_super_admin) if hasattr(user, 'is_org_admin') else (
+            normalize_role(user.get('role')) in ('platform_owner', 'super_admin', 'org_admin', 'organization_admin', 'admin')
+        )
+        if not is_allowed:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Forbidden: Organization Administrator access required'}), 403
+            return render_template('login.html', error="Forbidden: Organization Administrator access required."), 403
+        return f(user, *args, **kwargs)
+    return decorated
+
+def require_organization_access(resource_org_id, current_user):
+    """
+    Validates if current_user has authorized access to resource_org_id.
+    Returns True if allowed, False if cross-tenant violation.
+    """
+    if not current_user:
+        return False
+    is_super = current_user.is_super_admin if hasattr(current_user, 'is_super_admin') else (
+        normalize_role(current_user.get('role')) in ('platform_owner', 'super_admin')
+    )
+    if is_super:
+        return True
+    user_org = current_user.organization_id if hasattr(current_user, 'organization_id') else (
+        current_user.get('organization_id') or current_user.get('institution_id')
+    )
+    if not user_org:
+        return False
+    try:
+        return int(user_org) == int(resource_org_id)
+    except (ValueError, TypeError):
+        return False
+
+def resolve_tenant_id(current_user, requested_org_id=None, allow_global=True, strict_403=True):
+    """
+    Canonical Tenant Resolution Function.
+    Determines tenant scope strictly from the authenticated identity/session.
+    
+    Returns: (target_organization_id, error_tuple_or_None)
+    - For SUPER_ADMIN:
+        - If requested_org_id is provided: validates existence of organization, returns (target_id, None).
+        - If requested_org_id is None:
+            - If allow_global is True: returns (None, None) signifying platform-wide global scope.
+            - If allow_global is False: returns (None, ("organization_id is required for this operation.", 400)).
+    - For ORGANIZATION_ADMIN and below:
+        - If user has no organization_id: returns (None, ("Forbidden: Account is not associated with an approved organization.", 403)).
+        - If requested_org_id is provided and int(requested_org_id) != int(user_org_id):
+            RETURNS (None, ("Forbidden: Access to specified organization is denied.", 403)) ALWAYS.
+            Direct API tampering across tenants is immediately rejected.
+        - Returns (int(user_org_id), None).
+    """
+    if not current_user:
+        return None, ("Unauthorized", 401)
+
+    is_super = current_user.is_super_admin if hasattr(current_user, 'is_super_admin') else (
+        normalize_role(current_user.get('role')) in ('platform_owner', 'super_admin')
+    )
+    user_org_id = current_user.organization_id if hasattr(current_user, 'organization_id') else (
+        current_user.get('organization_id') or current_user.get('institution_id')
+    )
+
+    if is_super:
+        if requested_org_id is not None:
+            try:
+                target_id = int(requested_org_id)
+                from ..models.institution import InstitutionModel
+                inst = InstitutionModel.get_by_id(target_id)
+                if not inst:
+                    return None, ("Organization not found", 404)
+                return target_id, None
+            except (ValueError, TypeError):
+                return None, ("Invalid organization ID format", 400)
+        if allow_global:
+            return None, None
+        return None, ("organization_id is required for this action.", 400)
+
+    # Tenant users (org_admin, analyst, member):
+    if not user_org_id:
+        return None, ("Forbidden: Account is not associated with an approved organization", 403)
+
+    user_org_id = int(user_org_id)
+    if requested_org_id is not None:
+        try:
+            req_id = int(requested_org_id)
+            if req_id != user_org_id:
+                return None, ("Forbidden: Access to specified organization is denied", 403)
+        except (ValueError, TypeError):
+            return None, ("Invalid organization ID format", 400)
+
+    return user_org_id, None
+
+def require_role(*roles):
+    """
+    Role-based access control decorator.
+    Supports 'super_admin' / 'platform_owner', 'organization_admin' / 'org_admin', 'organization_member' / 'analyst'.
+    """
+    allowed = {str(r).lower().strip() for r in roles}
+
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                if request.is_json or request.path.startswith('/api/'):
+                    return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+                session.clear()
+                return redirect(url_for('auth.login'))
+
+            # 1. Platform Owner / Super Admin has unrestricted access
+            if user.is_super_admin:
+                return f(user, *args, **kwargs)
+
+            # 2. Org Admin is allowed if org_admin, admin, or any operational role is in allowed
+            if user.is_org_admin:
+                if any(r in allowed for r in ('org_admin', 'organization_admin', 'admin', 'analyst', 'operator', 'staff', 'member', 'organization_member')):
+                    return f(user, *args, **kwargs)
+
+            # 3. Analyst is allowed if analyst, operator, staff, or member is in allowed
+            if user.is_analyst:
+                if any(r in allowed for r in ('analyst', 'operator', 'staff', 'member', 'organization_member')):
+                    return f(user, *args, **kwargs)
+
+            # 4. Member is allowed if member is in allowed
+            if user.is_member:
+                if any(r in allowed for r in ('member', 'organization_member')):
+                    return f(user, *args, **kwargs)
+
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Forbidden: Insufficient privileges'}), 403
+            return render_template('login.html', error="Forbidden: Insufficient privileges for this action."), 403
+        return decorated
+    return decorator
+
+# =========================================================================
+# 2. EMAIL VERIFICATION
+# =========================================================================
+
+@auth_bp.route('/verify-email', methods=['GET', 'POST'])
+def verify_email():
+    client_ip = _get_client_ip()
+    token = request.args.get('token') or ((request.get_json() or {}).get('token') if request.is_json else request.form.get('token'))
+
+    if not token:
+        msg = "Missing or malformed verification token."
+        if request.is_json:
+            return jsonify({'success': False, 'error': msg}), 400
+        return render_template('login.html', error=msg), 400
+
+    # Rate limit check on verification attempts
+    is_locked, retry_after = auth_rate_limiter.is_locked(client_ip, token[:16], action='verify_email')
+    if is_locked:
+        err_msg = "Too many verification attempts. Please wait before retrying."
+        if request.is_json:
+            return jsonify({'success': False, 'error': err_msg}), 429
+        return render_template('login.html', error=err_msg), 429
+
+    user_id = AuthTokenService.verify_and_consume_email_token(token)
+    if not user_id:
+        auth_rate_limiter.record_failure(client_ip, token[:16], action='verify_email')
+        err_msg = "Verification link is invalid, has expired, or has already been used. Please log in or request a new link."
+        if request.is_json:
+            return jsonify({'success': False, 'error': err_msg}), 400
+        return render_template('login.html', error=err_msg), 400
+
+    # Transition account status from PENDING_EMAIL_VERIFICATION to PENDING_ADMIN_APPROVAL
+    UserModel.activate_user_email(user_id)
+    auth_rate_limiter.record_success(client_ip, token[:16], action='verify_email')
+
+    success_msg = "Your email has been verified successfully! Your account is now pending administrator approval. You will be notified once activated."
+    if request.is_json:
+        return jsonify({'success': True, 'message': success_msg, 'status': 'PENDING_ADMIN_APPROVAL'})
+    return render_template('login.html', success=success_msg)
+
+@auth_bp.route('/resend-verification', methods=['GET', 'POST'])
+def resend_verification():
+    """
+    Allows operators with unverified accounts to re-request their email verification link.
+    Maintains strict anti-enumeration uniformity.
+    """
+    if request.method == 'GET':
+        return render_template('login.html', info="Enter your email to request a new verification link.")
+
+    client_ip = _get_client_ip()
+    if request.is_json:
+        data = request.get_json() or {}
+        email = data.get('email') or ''
+    else:
+        email = request.form.get('email') or ''
+
+    clean_email = UserModel.normalize_email(email)
+    generic_msg = (
+        "If an account pending verification exists for this email address, "
+        "a new verification link has been dispatched to your inbox."
+    )
+
+    if not clean_email or '@' not in clean_email:
+        if request.is_json:
+            return jsonify({'success': False, 'error': 'A valid email address is required.'}), 400
+        return render_template('login.html', error='A valid email address is required.'), 400
+
+    is_locked, retry_after = auth_rate_limiter.is_locked(client_ip, clean_email, action='resend_verification')
+    if is_locked:
+        err_msg = "Too many verification requests. Please wait before retrying."
+        if request.is_json:
+            return jsonify({'success': False, 'error': err_msg}), 429
+        return render_template('login.html', error=err_msg), 429
+
+    user = UserModel.get_by_email(clean_email)
+    import logging
+    auth_logger = logging.getLogger("bullymail.auth")
+    masked_email = clean_email[:3] + "***@" + clean_email.split('@')[-1] if '@' in clean_email else "***"
+
+    if user and user.get('status') == 'PENDING_EMAIL_VERIFICATION':
+        try:
+            auth_logger.info(f"[REGISTRATION EMAIL] Resend verification requested for recipient={masked_email}")
+            raw_token = AuthTokenService.generate_email_verification_token(user['id'])
+            verify_url = auth_email_service.get_verification_url(raw_token)
+            is_sent, status_msg = auth_email_service.send_verification_email(clean_email, raw_token, user.get('username') or 'User')
+            if is_sent:
+                auth_logger.info(f"[REGISTRATION EMAIL] [FINAL_RESULT] SUCCESS: verification re-sent to {masked_email}")
+                auth_rate_limiter.record_success(client_ip, clean_email, action='resend_verification')
+            else:
+                auth_logger.error(f"[REGISTRATION EMAIL] [FINAL_RESULT] FAILED: verification resend failed for {masked_email}: {status_msg}")
+                auth_logger.info(f"[REGISTRATION EMAIL] [ACTIVATION_LINK] User {masked_email} activation URL: {verify_url}")
+                auth_rate_limiter.record_failure(client_ip, clean_email, action='resend_verification')
+        except Exception as e:
+            auth_logger.error(f"[REGISTRATION EMAIL] Resend verification exception for {masked_email}: {e}")
+            auth_rate_limiter.record_failure(client_ip, clean_email, action='resend_verification')
+    else:
+        # Simulate work to prevent timing enumeration
+        auth_logger.info(f"[REGISTRATION EMAIL] Resend verification requested for non-pending or unrecognised recipient={masked_email} (anti-enumeration simulated)")
+        UserModel.hash_password("dummy_password_for_timing")
+        auth_rate_limiter.record_failure(client_ip, clean_email, action='resend_verification')
+
+    if request.is_json:
+        return jsonify({'success': True, 'message': generic_msg})
+    return render_template('login.html', success=generic_msg)
+
+# =========================================================================
+# 3. LOGIN & AUTHENTICATION
+# =========================================================================
+
+@auth_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'GET':
+        if 'user_id' in session:
+            user = get_current_user()
+            if user:
+                return redirect(url_for('main.dashboard'))
+            else:
+                session.clear()
+
+        info_msg = None
+        if request.args.get('expired'):
+            info_msg = "Your session expired after 10 minutes of inactivity. Please sign in again."
+        elif request.args.get('logged_out'):
+            info_msg = "You have been successfully signed out."
+
+        resp = make_response(render_template('login.html', info=info_msg))
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0, private'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
+        return resp
+
+    if request.method == 'POST':
+        client_ip = _get_client_ip()
+
+        # Support both form data and JSON requests
+        if request.is_json:
+            data = request.get_json() or {}
+            identifier = (data.get('username') or data.get('identifier') or '').strip()
+            password = data.get('password') or ''
+            captcha_token = data.get('captcha_token') or ''
+        else:
+            identifier = (request.form.get('username') or request.form.get('identifier') or '').strip()
+            password = request.form.get('password') or ''
+            captcha_token = request.form.get('captcha_token') or ''
+
+        if not identifier or not password:
+            if request.is_json:
+                return jsonify({'success': False, 'error': 'Identifier and password are required'}), 400
+            return render_template('login.html', error='Identifier and password are required'), 400
+
+        # Check Brute-Force Rate Limiting Lockout
+        is_locked, retry_after = auth_rate_limiter.is_locked(client_ip, identifier, action='login')
+        if is_locked:
+            minutes = max(1, (retry_after + 59) // 60)
+            err_msg = f"Too many failed login attempts. Access temporarily restricted. Try again in {minutes} minute(s)."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg, 'retry_after': retry_after}), 429
+            return render_template('login.html', error=err_msg), 429
+
+        # Check progressive CAPTCHA requirement
+        if CaptchaService.is_enabled() or auth_rate_limiter.requires_captcha(client_ip, identifier, action='login'):
+            valid_cap, cap_err = CaptchaService.verify_token(captcha_token, client_ip)
+            if not valid_cap:
+                auth_rate_limiter.record_failure(client_ip, identifier, action='login')
+                if request.is_json:
+                    return jsonify({'success': False, 'error': cap_err}), 400
+                return render_template('login.html', error=cap_err), 400
+
+        user, auth_status = UserModel.authenticate(identifier, password)
+
+        if auth_status == 'SUCCESS' and user:
+            # Authentication succeeded: reset rate limit failure counters
+            auth_rate_limiter.record_success(client_ip, identifier, action='login')
+
+            # Session Rotation & Fixation Protection
+            session.clear()
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['full_name'] = user.get('full_name') or user.get('username')
+            session['role'] = user.get('role', 'analyst')
+            session['institution_id'] = user.get('institution_id')
+            session['auth_time'] = time.time()
+            session['last_activity'] = time.time()
+            session.permanent = True
+
+            if request.is_json:
+                return jsonify({'success': True, 'message': 'Login successful', 'redirect': url_for('main.dashboard')})
+            return redirect(url_for('main.dashboard'))
+
+        elif auth_status == 'PENDING_VERIFICATION':
+            auth_rate_limiter.record_failure(client_ip, identifier, action='login')
+            err_msg = "Account verification is pending. Please verify your email before logging in."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg, 'status': 'PENDING_VERIFICATION'}), 403
+            return render_template('login.html', error=err_msg), 403
+
+        elif auth_status == 'PENDING_ADMIN_APPROVAL':
+            auth_rate_limiter.record_failure(client_ip, identifier, action='login')
+            err_msg = "Your email has been verified, but your account is pending administrator approval."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg, 'status': 'PENDING_ADMIN_APPROVAL'}), 403
+            return render_template('login.html', error=err_msg), 403
+
+        elif auth_status == 'ACCOUNT_LOCKED':
+            auth_rate_limiter.record_failure(client_ip, identifier, action='login')
+            err_msg = "This account is temporarily locked for security. Please contact your administrator."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg, 'status': 'LOCKED'}), 403
+            return render_template('login.html', error=err_msg), 403
+
+        elif auth_status in ('ACCOUNT_DISABLED', 'DISABLED'):
+            auth_rate_limiter.record_failure(client_ip, identifier, action='login')
+            err_msg = "This account has been disabled. Please contact your administrator."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg, 'status': 'DISABLED'}), 403
+            return render_template('login.html', error=err_msg), 403
+
+        else:
+            # Generic Invalid Credentials Failure (Anti-Enumeration)
+            auth_rate_limiter.record_failure(client_ip, identifier, action='login')
+
+            # Check if this failure triggered a lockout
+            is_locked_now, retry_after_now = auth_rate_limiter.is_locked(client_ip, identifier, action='login')
+            if is_locked_now:
+                minutes = max(1, (retry_after_now + 59) // 60)
+                err_msg = f"Too many failed login attempts. Access temporarily restricted for {minutes} minute(s)."
+                if request.is_json:
+                    return jsonify({'success': False, 'error': err_msg, 'retry_after': retry_after_now}), 429
+                return render_template('login.html', error=err_msg), 429
+
+            if request.is_json:
+                return jsonify({'success': False, 'error': 'Invalid username or password'}), 401
+            return render_template('login.html', error='Invalid username or password'), 401
+
+    return render_template('login.html')
+
+# =========================================================================
+# 4. FORGOT PASSWORD
+# =========================================================================
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        client_ip = _get_client_ip()
+
+        if request.is_json:
+            data = request.get_json() or {}
+            email = (data.get('email') or '').strip()
+            captcha_token = data.get('captcha_token') or ''
+        else:
+            email = (request.form.get('email') or '').strip()
+            captcha_token = request.form.get('captcha_token') or ''
+
+        # Rate Limiting Check
+        is_locked, retry_after = auth_rate_limiter.is_locked(client_ip, email, action='forgot_password')
+        if is_locked:
+            minutes = max(1, (retry_after + 59) // 60)
+            err_msg = f"Too many password reset requests. Please try again in {minutes} minute(s)."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg, 'retry_after': retry_after}), 429
+            return render_template('forgot_password.html', error=err_msg), 429
+
+        # CAPTCHA validation
+        if CaptchaService.is_enabled() or auth_rate_limiter.requires_captcha(client_ip, email, action='forgot_password'):
+            valid_cap, cap_err = CaptchaService.verify_token(captcha_token, client_ip)
+            if not valid_cap:
+                auth_rate_limiter.record_failure(client_ip, email, action='forgot_password')
+                if request.is_json:
+                    return jsonify({'success': False, 'error': cap_err}), 400
+                return render_template('forgot_password.html', error=cap_err), 400
+
+        # Anti-Enumeration Uniform Response
+        uniform_msg = (
+            "If an account exists with this email address, password reset instructions have been dispatched. "
+            "Please check your inbox."
+        )
+
+        clean_email = UserModel.normalize_email(email)
+        user = UserModel.get_by_email(clean_email) if clean_email else None
+
+        if user and user.get('status') in ('ACTIVE', 'PENDING_EMAIL_VERIFICATION'):
+            raw_token = AuthTokenService.generate_password_reset_token(user['id'])
+            auth_email_service.send_password_reset_email(clean_email, raw_token, user.get('username', 'User'))
+            auth_rate_limiter.record_success(client_ip, clean_email, action='forgot_password')
+        else:
+            # Perform dummy work to prevent timing enumeration
+            UserModel.hash_password("dummy_password_timing_equalization")
+            auth_rate_limiter.record_failure(client_ip, clean_email, action='forgot_password')
+
+        if request.is_json:
+            return jsonify({'success': True, 'message': uniform_msg})
+        return render_template('forgot_password.html', success=uniform_msg)
+
+    return render_template('forgot_password.html')
+
+# =========================================================================
+# 5. PASSWORD RESET
+# =========================================================================
+
+@auth_bp.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    token = request.args.get('token') or ((request.get_json() or {}).get('token') if request.is_json else request.form.get('token'))
+    client_ip = _get_client_ip()
+
+    if request.method == 'POST':
+        if request.is_json:
+            data = request.get_json() or {}
+            new_password = data.get('password') or ''
+            confirm_password = data.get('confirm_password') or ''
+            token = data.get('token') or token
+        else:
+            new_password = request.form.get('password') or ''
+            confirm_password = request.form.get('confirm_password') or ''
+            token = request.form.get('token') or token
+
+        if not token:
+            msg = "Missing or invalid password reset token."
+            if request.is_json:
+                return jsonify({'success': False, 'error': msg}), 400
+            return render_template('reset_password.html', error=msg, token=token), 400
+
+        # Rate Limit Check
+        is_locked, retry_after = auth_rate_limiter.is_locked(client_ip, token[:16], action='reset_password')
+        if is_locked:
+            err_msg = "Too many reset attempts. Please wait before retrying."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg}), 429
+            return render_template('reset_password.html', error=err_msg, token=token), 429
+
+        is_match, match_err = UserModel.validate_password_confirmation(new_password, confirm_password)
+        if not is_match:
+            if request.is_json:
+                return jsonify({'success': False, 'error': match_err}), 400
+            return render_template('reset_password.html', error=match_err, token=token), 400
+
+        is_valid_pw, pw_err = UserModel.validate_password_policy(new_password)
+        if not is_valid_pw:
+            if request.is_json:
+                return jsonify({'success': False, 'error': pw_err}), 400
+            return render_template('reset_password.html', error=pw_err, token=token), 400
+
+        # Atomically validate and consume token
+        user_id = AuthTokenService.verify_and_consume_password_reset_token(token)
+        if not user_id:
+            auth_rate_limiter.record_failure(client_ip, token[:16], action='reset_password')
+            err_msg = "This password reset token is invalid, has expired, or has already been used."
+            if request.is_json:
+                return jsonify({'success': False, 'error': err_msg}), 400
+            return render_template('reset_password.html', error=err_msg, token=token), 400
+
+        # Update password & invalidate all other outstanding tokens
+        UserModel.set_password(user_id, new_password)
+        AuthTokenService.invalidate_all_tokens(user_id)
+
+        # Invalidate active session to force re-authentication
+        session.clear()
+        auth_rate_limiter.record_success(client_ip, token[:16], action='reset_password')
+
+        success_msg = "Password successfully reset! You may now authenticate with your new credentials."
+        if request.is_json:
+            return jsonify({'success': True, 'message': success_msg})
+        return render_template('login.html', success=success_msg)
+
+    return render_template('reset_password.html', token=token)
+
+# =========================================================================
+# 6. SESSION MANAGEMENT & LOGOUT
+# =========================================================================
+
+@auth_bp.route('/logout', methods=['GET', 'POST'])
+def logout():
+    session.clear()
+    session.modified = True
+
+    reason = request.args.get('reason')
+    if reason == 'inactivity':
+        target = url_for('auth.login', expired=1)
+    else:
+        target = url_for('auth.login', logged_out=1)
+
+    if request.is_json or (request.path.startswith('/api/') and request.headers.get('Accept') == 'application/json'):
+        resp = make_response(jsonify({'success': True, 'message': 'Logged out successfully', 'redirect': target}))
+    else:
+        resp = make_response(redirect(target))
+
+    # Aggressively delete session cookie with identical attributes across transport modes
+    cookie_name = current_app.config.get('SESSION_COOKIE_NAME', 'session')
+    raw_domain = current_app.config.get('SESSION_COOKIE_DOMAIN')
+    domain = raw_domain if isinstance(raw_domain, str) and raw_domain.strip() else None
+    path = current_app.config.get('SESSION_COOKIE_PATH', '/')
+    samesite = current_app.config.get('SESSION_COOKIE_SAMESITE', 'Lax')
+    is_secure = request.is_secure or current_app.config.get('SESSION_COOKIE_SECURE', False) or (os.environ.get('RENDER') is not None)
+
+    # Delete with secure flag matching incoming transport and without
+    resp.delete_cookie(cookie_name, path=path, domain=domain, secure=is_secure, httponly=True, samesite=samesite)
+    resp.delete_cookie(cookie_name, path=path, domain=domain, secure=False, httponly=True, samesite=samesite)
+    resp.delete_cookie(cookie_name, path='/')
+    resp.delete_cookie(cookie_name)
+
+    # Strict cache-control headers preventing any back-button or bfcache re-entry
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0, private'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+@auth_bp.route('/api/auth/logout', methods=['GET', 'POST'])
+def api_logout():
+    return logout()
+
+@auth_bp.route('/api/auth/status')
+def auth_status():
+    user = get_current_user()
+    if user:
+        return jsonify({
+            'authenticated': True,
+            'user_id': user.get('id'),
+            'username': user.get('username'),
+            'full_name': user.get('full_name') or user.get('username'),
+            'role': user.get('role'),
+            'institution_id': user.get('institution_id')
+        })
+    return jsonify({'authenticated': False})
+
+# =========================================================================
+# 7. ADMINISTRATOR USER APPROVAL & MANAGEMENT (PLATFORM OWNER ONLY)
+# =========================================================================
+
+@auth_bp.route('/api/admin/pending-users', methods=['GET'])
+@require_role('platform_owner')
+def get_pending_users(current_user):
+    """Lists accounts awaiting administrator approval (Platform Owner Only)."""
+    pending = UserModel.get_pending_approval_users()
+    return jsonify({'success': True, 'pending_users': pending})
+
+@auth_bp.route('/api/admin/approve-user/<int:target_user_id>', methods=['POST'])
+@require_role('platform_owner')
+def approve_user(current_user, target_user_id):
+    """Approves a user account, setting status to ACTIVE (Platform Owner Only)."""
+    data = request.get_json() or {}
+    role = data.get('role', 'org_admin')
+    institution_id = data.get('institution_id')
+
+    success = UserModel.approve_user_by_admin(target_user_id, role=role, institution_id=institution_id)
+    if not success:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    return jsonify({'success': True, 'message': 'User account approved successfully'})

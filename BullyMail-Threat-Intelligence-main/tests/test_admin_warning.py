@@ -1,0 +1,910 @@
+import json
+import pytest
+from bullymail.models.analysis import AnalysisModel
+from bullymail.models.user import UserModel
+from bullymail.models.institution import InstitutionModel
+from bullymail.services.admin_warning_service import admin_warning_service
+
+@pytest.fixture
+def test_setup_incidents(app):
+    """Sets up test institutions, users (admin and analyst), and threat analysis records."""
+    with app.app_context():
+        # Create Institution 2 if not exists
+        inst2_id = InstitutionModel.create_institution("Institution 2", "other-uni.edu")
+        if not inst2_id:
+            inst2 = InstitutionModel.get_by_domain("other-uni.edu")
+            inst2_id = inst2['id'] if inst2 else 2
+
+        # Create users
+        # Admin user (inst 1)
+        admin_id = UserModel.create_user(
+            username="test_admin_warning",
+            password="AdminPass123!",
+            email="admin_warning@inst1.com",
+            role="admin",
+            status="ACTIVE",
+            institution_id=1
+        )
+
+        # Analyst user (inst 1)
+        analyst_id = UserModel.create_user(
+            username="test_analyst_warning",
+            password="AnalystPass123!",
+            email="analyst_warning@inst1.com",
+            role="analyst",
+            status="ACTIVE",
+            institution_id=1
+        )
+
+        # Admin user (inst 2)
+        admin2_id = UserModel.create_user(
+            username="test_admin2_warning",
+            password="Admin2Pass123!",
+            email="admin_warning@inst2.com",
+            role="admin",
+            status="ACTIVE",
+            institution_id=inst2_id
+        )
+
+        # Create a bullying analysis report for inst 1
+        rep1 = {
+            'email_subject': 'You are a failure',
+            'email_from': 'Sender Person <sender_user@university.edu>',
+            'email_to': 'recipient_user@university.edu',
+            'email_text': 'You are completely useless and nobody respects you.',
+            'overall_risk_level': 'HIGH',
+            'overall_confidence': 0.92,
+            'threat_score': 0.92,
+            'incident_status': 'PENDING_REVIEW',
+            'bullying_analysis': {
+                'is_bullying': True,
+                'confidence': 0.92,
+                'rule_based_matches': ['insulting language', 'threatening expression'],
+                'rule_based_score': 0.85,
+                'ml_prediction': 1,
+                'ml_confidence': 0.90,
+                'model_used': 'Hybrid'
+            }
+        }
+        analysis_id_1 = AnalysisModel.save_analysis(rep1, institution_id=1, user_id=admin_id)
+
+        # Create a clean analysis report for inst 1
+        rep_clean = {
+            'email_subject': 'Office hours schedule',
+            'email_from': 'Clean User <clean_user@university.edu>',
+            'email_to': 'faculty@university.edu',
+            'email_text': 'Here are my questions for the project.',
+            'overall_risk_level': 'LOW',
+            'overall_confidence': 0.10,
+            'threat_score': 0.10,
+            'incident_status': 'PENDING_REVIEW',
+            'bullying_analysis': {
+                'is_bullying': False,
+                'confidence': 0.10,
+                'rule_based_matches': [],
+                'rule_based_score': 0.0,
+                'ml_prediction': 0,
+                'ml_confidence': 0.05,
+                'model_used': 'Hybrid'
+            }
+        }
+        analysis_id_clean = AnalysisModel.save_analysis(rep_clean, institution_id=1, user_id=admin_id)
+
+        # Create a bullying analysis report for inst 2
+        rep2 = {
+            'email_subject': 'Institution 2 Threat',
+            'email_from': 'inst2_sender@other-uni.edu',
+            'email_to': 'inst2_recipient@other-uni.edu',
+            'email_text': 'I will destroy your career.',
+            'overall_risk_level': 'HIGH',
+            'overall_confidence': 0.95,
+            'threat_score': 0.95,
+            'incident_status': 'PENDING_REVIEW',
+            'bullying_analysis': {
+                'is_bullying': True,
+                'confidence': 0.95,
+                'rule_based_matches': ['threat'],
+                'rule_based_score': 0.95,
+                'ml_prediction': 1,
+                'ml_confidence': 0.92,
+                'model_used': 'Hybrid'
+            }
+        }
+        analysis_id_2 = AnalysisModel.save_analysis(rep2, institution_id=inst2_id, user_id=admin2_id)
+
+        return {
+            'admin_id': admin_id,
+            'analyst_id': analyst_id,
+            'admin2_id': admin2_id,
+            'inst2_id': inst2_id,
+            'analysis_id_1': analysis_id_1,
+            'analysis_id_clean': analysis_id_clean,
+            'analysis_id_2': analysis_id_2
+        }
+
+def test_01_analyst_cannot_access_warning_endpoints(client, test_setup_incidents):
+    """TEST 1: Normal analyst user cannot send warning or access admin intervention endpoints (403)."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['analyst_id']
+        sess['username'] = 'test_analyst_warning'
+        sess['role'] = 'analyst'
+        sess['institution_id'] = 1
+
+    aid = test_setup_incidents['analysis_id_1']
+
+    # Preview endpoint
+    res = client.get(f'/api/admin/analysis/{aid}/warning-preview')
+    assert res.status_code == 403
+
+    # Send warning endpoint
+    res = client.post(f'/api/admin/analysis/{aid}/warning', json={})
+    assert res.status_code == 403
+
+    # Review endpoint
+    res = client.post(f'/api/admin/analysis/{aid}/review', json={})
+    assert res.status_code == 403
+
+    # False positive endpoint
+    res = client.post(f'/api/admin/analysis/{aid}/false-positive', json={})
+    assert res.status_code == 403
+
+def test_02_warning_preview_generated_correctly_with_hello_greeting(client, test_setup_incidents):
+    """TEST 2: Warning preview has 'Hello,' greeting, correct sender & recipient, and non-accusatory tone."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['admin_id']
+        sess['username'] = 'test_admin_warning'
+        sess['role'] = 'admin'
+        sess['institution_id'] = 1
+
+    aid = test_setup_incidents['analysis_id_1']
+    res = client.get(f'/api/admin/analysis/{aid}/warning-preview')
+    assert res.status_code == 200
+    data = res.get_json()
+
+    assert data['success'] is True
+    assert data['target_recipient'] == 'sender_user@university.edu'
+    assert data['email_from'] == 'Sender Person <sender_user@university.edu>'
+    assert data['email_to'] == 'recipient_user@university.edu'
+    assert data['incident_status'] == 'PENDING_REVIEW'
+    assert data['is_already_sent'] is False
+
+    # Verify neutral greeting
+    assert data['warning_body'].startswith("Hello,\n\n")
+    assert "Dear Student" not in data['warning_body']
+    assert "Dear Faculty" not in data['warning_body']
+
+    # Ensure advisory, non-accusatory language
+    assert "guilty" not in data['warning_body'].lower()
+    assert "violated the law" not in data['warning_body'].lower()
+
+def test_03_admin_sends_warning_to_original_sender(client, test_setup_incidents, monkeypatch):
+    """TEST 3: Admin sends warning email; recipient is original sender, status -> WARNING_SENT, audit created."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['admin_id']
+        sess['username'] = 'test_admin_warning'
+        sess['role'] = 'admin'
+        sess['institution_id'] = 1
+
+    aid = test_setup_incidents['analysis_id_1']
+    sent_emails = []
+
+    def mock_send(recipient_email, subject=None, body=None, **kwargs):
+        sent_emails.append({
+            'recipient': recipient_email,
+            'subject': subject,
+            'body': body
+        })
+        return True, "Warning email sent successfully."
+
+    monkeypatch.setattr(admin_warning_service, 'send_warning_email', mock_send)
+
+    res = client.post(f'/api/admin/analysis/{aid}/warning', json={})
+    assert res.status_code == 200
+    data = res.get_json()
+
+    assert data['success'] is True
+    assert data['status'] == 'WARNING_SENT'
+    assert data['warning_recipient'] == 'sender_user@university.edu'
+
+    # Verify mock received original sender
+    assert len(sent_emails) == 1
+    assert sent_emails[0]['recipient'] == 'sender_user@university.edu'
+    assert "Notice Regarding University Communication Guidelines" in sent_emails[0]['subject']
+
+    # Verify database status updated
+    updated_rec = AnalysisModel.get_by_id(aid, institution_id=1, role='admin')
+    assert updated_rec['incident_status'] == 'WARNING_SENT'
+
+    # Verify audit log created
+    assert len(updated_rec['audit_logs']) >= 1
+    last_audit = updated_rec['audit_logs'][0]
+    assert last_audit['action'] == 'WARNING_SENT'
+    assert last_audit['admin_username'] == 'test_admin_warning'
+    assert last_audit['warning_recipient'] == 'sender_user@university.edu'
+    assert last_audit['delivery_status'] == 'SUCCESS'
+
+def test_04_duplicate_warning_is_blocked(client, test_setup_incidents, monkeypatch):
+    """TEST 4: Duplicate warning is blocked if incident_status is already WARNING_SENT."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['admin_id']
+        sess['username'] = 'test_admin_warning'
+        sess['role'] = 'admin'
+        sess['institution_id'] = 1
+
+    aid = test_setup_incidents['analysis_id_1']
+    # Set status to WARNING_SENT
+    AnalysisModel.update_incident_status(aid, 'WARNING_SENT', institution_id=1)
+
+    monkeypatch.setattr(admin_warning_service, 'send_warning_email', lambda *args, **kwargs: (True, "OK"))
+
+    res = client.post(f'/api/admin/analysis/{aid}/warning', json={})
+    assert res.status_code == 400
+    data = res.get_json()
+    assert data['success'] is False
+    assert data.get('warning_already_sent') is True
+    assert 'already been dispatched' in data['error']
+
+def test_05_cross_tenant_admin_cannot_access_other_tenant_incident(client, test_setup_incidents):
+    """TEST 5: Admin of Institution 1 cannot send warning or access incident of Institution 2 (404)."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['admin_id']
+        sess['username'] = 'test_admin_warning'
+        sess['role'] = 'admin'
+        sess['institution_id'] = 1
+
+    # Analysis ID 2 belongs to Institution 2
+    aid_2 = test_setup_incidents['analysis_id_2']
+
+    res = client.get(f'/api/admin/analysis/{aid_2}/warning-preview')
+    assert res.status_code == 404
+
+    res = client.post(f'/api/admin/analysis/{aid_2}/warning', json={})
+    assert res.status_code == 404
+
+    res = client.post(f'/api/admin/analysis/{aid_2}/review', json={})
+    assert res.status_code == 404
+
+def test_06_failed_smtp_does_not_mark_warning_as_sent(client, test_setup_incidents, monkeypatch):
+    """TEST 6: If SMTP sending fails, status remains PENDING_REVIEW and error is reported."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['admin_id']
+        sess['username'] = 'test_admin_warning'
+        sess['role'] = 'admin'
+        sess['institution_id'] = 1
+
+    aid = test_setup_incidents['analysis_id_clean']
+    # Reset status
+    AnalysisModel.update_incident_status(aid, 'PENDING_REVIEW', institution_id=1)
+
+    # Mock SMTP failure
+    monkeypatch.setattr(admin_warning_service, 'send_warning_email', lambda *a, **k: (False, "SMTP connection timed out."))
+
+    res = client.post(f'/api/admin/analysis/{aid}/warning', json={})
+    assert res.status_code == 500
+    data = res.get_json()
+    assert data['success'] is False
+    assert "SMTP connection timed out" in data['error']
+
+    # Confirm status was NOT changed to WARNING_SENT
+    rec = AnalysisModel.get_by_id(aid, institution_id=1, role='admin')
+    assert rec['incident_status'] == 'PENDING_REVIEW'
+
+def test_07_mark_reviewed_action(client, test_setup_incidents):
+    """TEST 7: Admin can mark incident as REVIEWED and audit trail is recorded."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['admin_id']
+        sess['username'] = 'test_admin_warning'
+        sess['role'] = 'admin'
+        sess['institution_id'] = 1
+
+    aid = test_setup_incidents['analysis_id_1']
+    res = client.post(f'/api/admin/analysis/{aid}/review', json={'note': 'Acknowledged benign inquiry'})
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert data['status'] == 'REVIEWED'
+
+    rec = AnalysisModel.get_by_id(aid, institution_id=1, role='admin')
+    assert rec['incident_status'] == 'REVIEWED'
+    assert any(log['action'] == 'REVIEWED' for log in rec['audit_logs'])
+
+def test_08_mark_false_positive_action(client, test_setup_incidents):
+    """TEST 8: Admin can mark incident as FALSE_POSITIVE with reason and audit trail."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['admin_id']
+        sess['username'] = 'test_admin_warning'
+        sess['role'] = 'admin'
+        sess['institution_id'] = 1
+
+    aid = test_setup_incidents['analysis_id_1']
+    res = client.post(f'/api/admin/analysis/{aid}/false-positive', json={
+        'reason': 'Academic criticism',
+        'notes': 'Peer review critique on thesis draft'
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['success'] is True
+    assert data['status'] == 'FALSE_POSITIVE'
+
+    rec = AnalysisModel.get_by_id(aid, institution_id=1, role='admin')
+    assert rec['incident_status'] == 'FALSE_POSITIVE'
+    fp_audit = next((l for l in rec['audit_logs'] if l['action'] == 'FALSE_POSITIVE'), None)
+    assert fp_audit is not None
+    assert 'Academic criticism' in fp_audit['reason']
+
+def test_09_credentials_never_exposed_in_any_warning_endpoint(client, test_setup_incidents):
+    """TEST 9: API endpoints never expose SMTP passwords, tokens, or encryption keys in JSON responses."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['admin_id']
+        sess['username'] = 'test_admin_warning'
+        sess['role'] = 'admin'
+        sess['institution_id'] = 1
+
+    aid = test_setup_incidents['analysis_id_1']
+    res = client.get(f'/api/admin/analysis/{aid}/warning-preview')
+    resp_str = res.get_data(as_text=True)
+
+    assert 'SMTP_PASSWORD' not in resp_str
+    assert 'EMAIL_APP_PASSWORD' not in resp_str
+    assert 'password_hash' not in resp_str
+    assert 'encrypted_app_password' not in resp_str
+
+def test_10_smtp_config_prioritizes_active_db_mailbox_over_env_vars(app, monkeypatch):
+    """TEST 10: get_smtp_config prioritizes active DB mailbox decrypted credentials over environment variables."""
+    from bullymail.services.crypto_service import CryptoService
+    from bullymail.services.email_service import EmailService
+
+    with app.app_context():
+        # Set stale environment variables
+        monkeypatch.setattr('bullymail.config.Config.SMTP_USERNAME', 'stale_env_user@domain.com')
+        monkeypatch.setattr('bullymail.config.Config.SMTP_PASSWORD', 'stale_env_pass_123')
+
+        # Configure an active mailbox in DB for institution 1
+        email_svc = EmailService()
+        email_svc.configure_mailbox(
+            institution_id=1,
+            email_address="active_db_mailbox@gmail.com",
+            app_password="decrypted_db_app_pass_456"
+        )
+
+        cfg = admin_warning_service.get_smtp_config(institution_id=1)
+        assert cfg['username'] == "active_db_mailbox@gmail.com"
+        assert cfg['password'] == "decrypted_db_app_pass_456"
+        assert cfg['credential_source'] == "connected_mailbox"
+        assert cfg['from_email'] == "active_db_mailbox@gmail.com"
+
+def test_11_crypto_service_decrypt_strips_quotes_and_whitespace():
+    """TEST 11: CryptoService.decrypt strips leading/trailing whitespace and surrounding quotes."""
+    from bullymail.services.crypto_service import CryptoService
+
+    token_quoted = CryptoService.encrypt('"  my_secret_app_pass  "')
+    decrypted = CryptoService.decrypt(token_quoted)
+    assert decrypted == "my_secret_app_pass"
+
+    token_single_quoted = CryptoService.encrypt("'  another_secret_pass  '")
+    decrypted_single = CryptoService.decrypt(token_single_quoted)
+    assert decrypted_single == "another_secret_pass"
+
+def test_12_smtp_authentication_error_handling_and_message(monkeypatch):
+    """TEST 12: send_warning_email catches SMTPAuthenticationError and returns truthful error message."""
+    import smtplib
+
+    def mock_login(*args, **kwargs):
+        raise smtplib.SMTPAuthenticationError(535, b'5.7.8 Username and Password not accepted')
+
+    monkeypatch.setattr('smtplib.SMTP.login', mock_login)
+    monkeypatch.setattr('smtplib.SMTP.starttls', lambda *args, **kwargs: None)
+    monkeypatch.setattr('smtplib.SMTP.connect', lambda *args, **kwargs: (220, b'Ready'))
+
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda institution_id=None: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'admin_test@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'admin_test@gmail.com',
+        'from_name': 'BullyMail Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = admin_warning_service.send_warning_email(
+        recipient_email="target_user@domain.com",
+        subject="Test Warning",
+        body="Test Body",
+        institution_id=1
+    )
+
+    assert ok is False
+    assert "Gmail SMTP authentication failed. Verify the connected mailbox App Password/credentials." in msg
+
+def test_13_gmail_sender_matches_authenticated_username(monkeypatch):
+    """TEST 13: For Gmail host, From header / envelope sender matches authenticated username strictly."""
+    import smtplib
+
+    sent_data = {}
+
+    class MockSMTP:
+        def __init__(self, host, port, timeout=15):
+            pass
+        def starttls(self, context=None):
+            pass
+        def login(self, user, password):
+            sent_data['logged_in_user'] = user
+        def sendmail(self, from_addr, to_addrs, msg_str):
+            sent_data['from_addr'] = from_addr
+            sent_data['to_addrs'] = to_addrs
+            sent_data['msg_str'] = msg_str
+            return {}
+        def quit(self):
+            pass
+
+    monkeypatch.setattr('smtplib.SMTP', MockSMTP)
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda institution_id=None: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'authenticated_gmail_user@gmail.com',
+        'password': 'valid_app_password',
+        'use_tls': True,
+        'from_email': 'unmatched_sender@bullymail.local',
+        'from_name': 'BullyMail Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = admin_warning_service.send_warning_email(
+        recipient_email="target_user@domain.com",
+        subject="Test Warning",
+        body="Test Body",
+        institution_id=1
+    )
+
+    assert ok is True
+    assert sent_data['logged_in_user'] == 'authenticated_gmail_user@gmail.com'
+    assert sent_data['from_addr'] == 'authenticated_gmail_user@gmail.com'
+
+
+def test_14_smtp_port_465_ssl_dispatch(monkeypatch):
+    """TEST 14: Configured with port 465 SSL, dispatches via smtplib.SMTP_SSL."""
+    import smtplib
+
+    ssl_used = {}
+
+    class MockSMTP_SSL:
+        def __init__(self, host, port, timeout=15, context=None):
+            ssl_used['host'] = host
+            ssl_used['port'] = port
+        def login(self, user, password):
+            ssl_used['login_user'] = user
+        def sendmail(self, from_addr, to_addrs, msg_str):
+            ssl_used['from_addr'] = from_addr
+            return {}
+        def quit(self):
+            pass
+
+    monkeypatch.setattr('smtplib.SMTP_SSL', MockSMTP_SSL)
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda institution_id=None, mailbox_id=None: {
+        'host': 'smtp.gmail.com',
+        'port': 465,
+        'username': 'admin_465@gmail.com',
+        'password': 'ssl_app_password',
+        'use_tls': False,
+        'from_email': 'admin_465@gmail.com',
+        'from_name': 'BullyMail Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = admin_warning_service.send_warning_email(
+        recipient_email="recipient@example.com",
+        subject="Test 465 SSL",
+        body="Test Body"
+    )
+
+    assert ok is True
+    assert ssl_used['host'] == 'smtp.gmail.com'
+    assert ssl_used['port'] == 465
+    assert ssl_used['login_user'] == 'admin_465@gmail.com'
+
+
+def test_15_smtp_explicit_port_selection(monkeypatch):
+    """TEST 15: send_warning_email supports explicit target_port parameter (e.g. 465)."""
+    import smtplib
+
+    used_port = {}
+
+    class MockSMTP_SSL:
+        def __init__(self, host, port, timeout=10, context=None):
+            used_port['port'] = port
+        def login(self, user, password):
+            pass
+        def sendmail(self, from_addr, to_addrs, msg_str):
+            return {}
+        def quit(self):
+            pass
+
+    monkeypatch.setattr('smtplib.SMTP_SSL', MockSMTP_SSL)
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda institution_id=None, mailbox_id=None: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'port_user@gmail.com',
+        'password': 'port_app_password',
+        'use_tls': True,
+        'from_email': 'port_user@gmail.com',
+        'from_name': 'BullyMail Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = admin_warning_service.send_warning_email(
+        recipient_email="recipient@example.com",
+        subject="Port Override Test",
+        body="Test Body",
+        target_port=465
+    )
+
+    assert ok is True
+    assert used_port['port'] == 465
+    assert msg == "Warning email sent successfully."
+
+
+def test_16_smtp_connection_failure_bounded_timeout_message(monkeypatch):
+    """TEST 16: Socket connection error returns bounded 10s timeout failure message."""
+    import smtplib
+    import socket
+
+    class MockSMTP_Fail:
+        def __init__(self, host, port, timeout=10):
+            raise socket.error("Connection timed out")
+
+    monkeypatch.setattr('smtplib.SMTP', MockSMTP_Fail)
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda institution_id=None, mailbox_id=None: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'fail_user@gmail.com',
+        'password': 'fail_app_password',
+        'use_tls': True,
+        'from_email': 'fail_user@gmail.com',
+        'from_name': 'BullyMail Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = admin_warning_service.send_warning_email(
+        recipient_email="recipient@example.com",
+        subject="Fail Test",
+        body="Test Body"
+    )
+
+    assert ok is False
+    assert "Could not connect to SMTP server (smtp.gmail.com:587) within 10s: Connection timed out" in msg
+
+
+def test_17_smtp_recipient_refused_returns_error(monkeypatch):
+    """TEST 17: Recipient is refused by server sendmail; returns failure and refusal details."""
+    import smtplib
+
+    class MockSMTP_Refused:
+        def __init__(self, host, port, timeout=15):
+            pass
+        def starttls(self, context=None):
+            pass
+        def login(self, user, password):
+            pass
+        def sendmail(self, from_addr, to_addrs, msg_str):
+            return {'bad_recipient@example.com': (550, b'5.1.1 User unknown')}
+        def quit(self):
+            pass
+
+    monkeypatch.setattr('smtplib.SMTP', MockSMTP_Refused)
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda institution_id=None, mailbox_id=None: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'refuse_user@gmail.com',
+        'password': 'refuse_app_password',
+        'use_tls': True,
+        'from_email': 'refuse_user@gmail.com',
+        'from_name': 'BullyMail Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = admin_warning_service.send_warning_email(
+        recipient_email="bad_recipient@example.com",
+        subject="Refusal Test",
+        body="Test Body"
+    )
+
+    assert ok is False
+    assert "Recipient refused by mail server (Code 550)" in msg
+    assert "5.1.1 User unknown" in msg
+
+
+def test_18_smtp_exception_masks_secrets(monkeypatch):
+    """TEST 18: SMTP exception strings that include raw password get masked with ********."""
+    import smtplib
+
+    secret_pw = "VERY_SECRET_APP_PASS_999"
+
+    class MockSMTP_SecretException:
+        def __init__(self, host, port, timeout=15):
+            pass
+        def starttls(self, context=None):
+            pass
+        def login(self, user, password):
+            raise smtplib.SMTPException(f"Error authenticating with password '{secret_pw}'")
+        def quit(self):
+            pass
+
+    monkeypatch.setattr('smtplib.SMTP', MockSMTP_SecretException)
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda institution_id=None, mailbox_id=None: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'secret_user@gmail.com',
+        'password': secret_pw,
+        'use_tls': True,
+        'from_email': 'secret_user@gmail.com',
+        'from_name': 'BullyMail Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = admin_warning_service.send_warning_email(
+        recipient_email="recipient@example.com",
+        subject="Secret Test",
+        body="Test Body"
+    )
+
+    assert ok is False
+    assert secret_pw not in msg
+    assert "********" in msg
+
+
+def test_19_admin_smtp_diagnostics_endpoint(client, test_setup_incidents, monkeypatch):
+    """TEST 19: Admin can call /api/admin/diagnostics/smtp and receive connectivity breakdown."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['admin_id']
+        sess['username'] = 'test_admin_warning'
+        sess['role'] = 'admin'
+        sess['institution_id'] = 1
+
+    from bullymail.services.admin_warning_service import AdminWarningService
+    monkeypatch.setattr(AdminWarningService, 'run_smtp_diagnostics', classmethod(lambda cls, *args, **kwargs: {
+        'host': 'smtp.gmail.com',
+        'dns': True,
+        'dns_ip': '142.250.1.108',
+        'dns_ms': 15.2,
+        'port_587': {'tcp': True, 'starttls': True, 'tcp_ms': 42.1},
+        'port_465': {'tcp': True, 'ssl_connected': True, 'ssl_ms': 39.5},
+        'smtp_auth': {'attempted': True, 'port': 587, 'success': True, 'auth_ms': 120.4}
+    }))
+
+    res = client.get('/api/admin/diagnostics/smtp')
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['dns'] is True
+    assert data['port_587'] is True
+    assert data['port_465'] is True
+    assert data['smtp_auth'] is True
+    assert 'details' in data
+
+
+def test_20_analyst_cannot_access_smtp_diagnostics(client, test_setup_incidents):
+    """TEST 20: Analyst cannot access diagnostic endpoint (403 Forbidden)."""
+    with client.session_transaction() as sess:
+        sess['user_id'] = test_setup_incidents['analyst_id']
+        sess['username'] = 'test_analyst_warning'
+        sess['role'] = 'analyst'
+        sess['institution_id'] = 1
+
+    res = client.get('/api/admin/diagnostics/smtp')
+    assert res.status_code == 403
+
+
+def test_21_admin_warning_email_brevo_api_dispatch(monkeypatch):
+    """TEST 21: Verify that when BREVO_API_KEY is configured, AdminWarningService dispatches via HTTPS Brevo API."""
+    import urllib.request
+    import json
+    from bullymail.services.admin_warning_service import AdminWarningService
+
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setenv("BREVO_API_KEY", "xkeysib-test-warning-brevo-key")
+    monkeypatch.setenv("BREVO_FROM_EMAIL", "security@bullymail.org")
+
+    captured_req = {}
+
+    class MockResponse:
+        status = 201
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_urlopen(req, timeout=None):
+        captured_req['url'] = req.full_url
+        captured_req['headers'] = dict(req.headers)
+        captured_req['data'] = json.loads(req.data.decode('utf-8'))
+        return MockResponse()
+
+    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda **kw: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'admin_inst@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'admin_inst@gmail.com',
+        'from_name': 'BullyMail Administration',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = AdminWarningService.send_warning_email(
+        recipient_email="cocanvascontact@gmail.com",
+        subject="Notice Regarding University Communication Guidelines",
+        body="This notification is intended as an advisory warning.",
+        institution_id=1
+    )
+
+    assert ok is True
+    assert "Brevo API" in msg
+    assert captured_req['url'] == 'https://api.brevo.com/v3/smtp/email'
+    assert captured_req['headers']['Api-key'] == 'xkeysib-test-warning-brevo-key'
+    assert captured_req['data']['to'] == [{'email': 'cocanvascontact@gmail.com'}]
+    assert captured_req['data']['subject'] == 'Notice Regarding University Communication Guidelines'
+    assert 'advisory warning' in captured_req['data']['textContent']
+
+
+def test_22_brevo_unverified_sender_retries_verified_default(monkeypatch):
+    """TEST 22: If mailbox sender returns Brevo HTTP 400 (unverified sender), automatically retry with verified default sender and replyTo."""
+    import urllib.request
+    import urllib.error
+    import json
+    import io
+    from bullymail.services.admin_warning_service import AdminWarningService
+
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.delenv("BREVO_FROM_EMAIL", raising=False)
+    monkeypatch.setenv("BREVO_API_KEY", "xkeysib-test-warning-retry-key")
+
+    calls = []
+
+    class MockResponse:
+        status = 201
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_urlopen(req, timeout=None):
+        data = json.loads(req.data.decode('utf-8'))
+        calls.append(data)
+        if data['sender']['email'] == 'unverified_mailbox@gmail.com':
+            # Simulate Brevo HTTP 400 for unverified sender
+            err_fp = io.BytesIO(b'{"code":"invalid_parameter","message":"Sender email is not valid or not verified"}')
+            raise urllib.error.HTTPError(
+                url=req.full_url,
+                code=400,
+                msg='Bad Request',
+                hdrs={'Content-Type': 'application/json'},
+                fp=err_fp
+            )
+        return MockResponse()
+
+    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda **kw: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'unverified_mailbox@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'unverified_mailbox@gmail.com',
+        'from_name': 'Denver Institute Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = AdminWarningService.send_warning_email(
+        recipient_email="cocanvascontact@gmail.com",
+        subject="Warning Notice",
+        body="Warning body text.",
+        institution_id=1
+    )
+
+    assert ok is True
+    assert "Brevo API" in msg
+    assert len(calls) == 2
+    # First attempt tried mailbox sender
+    assert calls[0]['sender']['email'] == 'unverified_mailbox@gmail.com'
+    # Second attempt fell back to verified default sender and set replyTo
+    assert calls[1]['sender']['email'] == 'jayachandravennam.jc@gmail.com'
+    assert calls[1]['replyTo']['email'] == 'unverified_mailbox@gmail.com'
+
+
+def test_23_brevo_failure_and_smtp_unreachable_reports_informative_error(monkeypatch):
+    """TEST 23: When Brevo HTTP API fails and SMTP is blocked with [Errno 101], returns informative cloud delivery error."""
+    import urllib.request
+    import urllib.error
+    import io
+    import smtplib
+    from bullymail.services.admin_warning_service import AdminWarningService
+
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setenv("BREVO_API_KEY", "xkeysib-bad-key")
+
+    def mock_urlopen(req, timeout=None):
+        err_fp = io.BytesIO(b'{"code":"unauthorized","message":"Key not found"}')
+        raise urllib.error.HTTPError(
+            url=req.full_url,
+            code=401,
+            msg='Unauthorized',
+            hdrs={'Content-Type': 'application/json'},
+            fp=err_fp
+        )
+
+    monkeypatch.setattr(urllib.request, 'urlopen', mock_urlopen)
+
+    class MockSMTP_Unreachable:
+        def __init__(self, host, port, timeout=10):
+            raise OSError(101, 'Network is unreachable')
+
+    monkeypatch.setattr(smtplib, 'SMTP', MockSMTP_Unreachable)
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda **kw: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'inst_admin@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'inst_admin@gmail.com',
+        'from_name': 'Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = AdminWarningService.send_warning_email(
+        recipient_email="cocanvascontact@gmail.com",
+        subject="Test Warning",
+        body="Test Body",
+        institution_id=1
+    )
+
+    assert ok is False
+    assert "Cloud delivery failed" in msg
+    assert "401" in msg or "Unauthorized" in msg
+
+
+def test_24_no_http_api_and_smtp_unreachable_guides_user_to_set_brevo_key(monkeypatch):
+    """TEST 24: When no HTTP API key is set and SMTP raises Errno 101, guide user to set BREVO_API_KEY in Render."""
+    import smtplib
+    from bullymail.services.admin_warning_service import AdminWarningService
+
+    monkeypatch.delenv("BREVO_API_KEY", raising=False)
+    monkeypatch.delenv("SENDINBLUE_API_KEY", raising=False)
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+
+    class MockSMTP_Unreachable:
+        def __init__(self, host, port, timeout=10):
+            raise OSError(101, 'Network is unreachable')
+
+    monkeypatch.setattr(smtplib, 'SMTP', MockSMTP_Unreachable)
+    monkeypatch.setattr(AdminWarningService, 'get_smtp_config', lambda **kw: {
+        'host': 'smtp.gmail.com',
+        'port': 587,
+        'username': 'inst_admin@gmail.com',
+        'password': 'test_app_password',
+        'use_tls': True,
+        'from_email': 'inst_admin@gmail.com',
+        'from_name': 'Admin',
+        'credential_source': 'connected_mailbox'
+    })
+
+    ok, msg = AdminWarningService.send_warning_email(
+        recipient_email="cocanvascontact@gmail.com",
+        subject="Test Warning",
+        body="Test Body",
+        institution_id=1
+    )
+
+    assert ok is False
+    assert "Outbound SMTP is blocked on cloud hosting" in msg
+    assert "BREVO_API_KEY" in msg
+
+

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — BullyMail SOC</title>
+    <meta name="description" content="Privacy Policy and institutional data governance standards for the BullyMail SOC platform.">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v=2.7.3">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon.png') }}?v=2.7.3">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}?v=2.7.3">
+    <script>
+        (function() {
+            const saved = localStorage.getItem('bullymail_theme');
+            const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.7.3">
+    <style>
+        body {
+            background-color: var(--bg-canvas);
+            color: var(--text-primary);
+            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            padding: 40px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .legal-card {
+            background: var(--bg-surface-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            box-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.85);
+            padding: 36px 32px;
+            max-width: 800px;
+            width: 100%;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        [data-theme="light"] .legal-card {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+        }
+
+        .legal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .legal-header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.45rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin: 0;
+            letter-spacing: -0.01em;
+        }
+
+        .btn-contact-close-icon {
+            background: var(--bg-surface);
+            border: 1px solid var(--neu-rim-subtle);
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            text-decoration: none;
+            box-shadow: var(--neu-btn);
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .btn-contact-close-icon {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.08), -2px -2px 5px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-secondary) !important;
+        }
+
+        .btn-contact-close-icon:hover {
+            color: var(--text-primary) !important;
+            transform: translateY(-1px);
+            box-shadow: var(--neu-btn-hover);
+        }
+
+        .btn-contact-close-icon:active {
+            transform: translateY(1px);
+            box-shadow: var(--neu-btn-pressed) !important;
+        }
+
+        .legal-section-title {
+            color: var(--text-primary);
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-top: 24px;
+            margin-bottom: 8px;
+        }
+
+        .legal-section-text {
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .legal-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        [data-theme="light"] .legal-card-footer {
+            border-top-color: rgba(0, 0, 0, 0.07);
+        }
+
+        .legal-footer-copy {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .btn-contact-close-action {
+            background: var(--bg-surface-elevated);
+            color: var(--text-primary) !important;
+            font-weight: 600;
+            font-size: 0.88rem;
+            padding: 9px 24px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: var(--neu-btn);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .btn-contact-close-action {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.08), -2px -2px 6px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .btn-contact-close-action:hover {
+            box-shadow: var(--neu-btn-hover);
+            transform: translateY(-1px);
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="light"] .btn-contact-close-action:hover {
+            box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.12), -3px -3px 8px rgba(255, 255, 255, 0.95) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .btn-contact-close-action:active {
+            box-shadow: var(--neu-btn-pressed) !important;
+            transform: translateY(1px);
+        }
+
+        .theme-toggle-fixed {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+        }
+
+        .theme-toggle-btn {
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+            cursor: pointer;
+            box-shadow: var(--neu-flat);
+            transition: all 0.2s ease;
+        }
+
+        .theme-toggle-btn:hover {
+            transform: rotate(15deg) scale(1.05);
+            border-color: var(--accent-primary);
+        }
+
+        @media (max-width: 576px) {
+            .legal-card {
+                padding: 24px 18px;
+            }
+            .legal-card-footer {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+            .legal-card-footer .d-flex {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Fixed Theme Toggle -->
+    <div class="theme-toggle-fixed">
+        <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark/light theme" title="Toggle Theme">
+            <i class="fas fa-sun" id="themeIcon"></i>
+        </button>
+    </div>
+
+    <div class="legal-card">
+        <!-- Header with Title and Close X Button -->
+        <div class="legal-header">
+            <h1 class="legal-header-title">
+                <i class="fas fa-user-shield text-primary"></i> Privacy Policy
+            </h1>
+            <a href="{{ url_for('main.index') }}" class="btn-contact-close-icon" aria-label="Close" title="Back to Home">
+                <i class="fas fa-times"></i>
+            </a>
+        </div>
+        
+        <p class="text-secondary small mb-4">Effective Date: September 2026</p>
+        
+        <h2 class="legal-section-title">1. Information We Collect</h2>
+        <p class="legal-section-text">BullyMail processes email headers, text snippets, and uploaded security telemetry submitted for cyberbullying and threat intelligence analysis. User authentication records include username, institutional email address, and role assignments.</p>
+
+        <h2 class="legal-section-title">2. Data Usage &amp; Confidentiality</h2>
+        <p class="legal-section-text">Submitted email telemetry is processed strictly for risk scoring, threat classification, and explainable evidence extraction. We do not sell, rent, or distribute ingested data to third-party advertisers.</p>
+
+        <h2 class="legal-section-title">3. Security Controls &amp; Encryption</h2>
+        <p class="legal-section-text">All stored operational credentials and mail server credentials are encrypted at rest using AES-128-CBC + HMAC-SHA256 (Fernet master keys). Session cookies are protected via HttpOnly and SameSite attributes.</p>
+
+        <h2 class="legal-section-title">4. Inquiries &amp; Security Contact</h2>
+        <p class="legal-section-text">For privacy questions, data governance inquiries, or compliance support, contact <a href="mailto:bullymail.project@gmail.com" class="text-accent text-decoration-none">bullymail.project@gmail.com</a> or visit our <a href="/contact" class="text-accent text-decoration-none">Contact Desk</a>.</p>
+
+        <!-- Footer with Attribution and Close Action -->
+        <div class="legal-card-footer">
+            <p class="legal-footer-copy">
+                BullyMail &copy; 2026 &bull; Built by Jaya Chandra Vennam
+            </p>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('main.index') }}" class="btn-contact-close-action">
+                    Close
+                </a>
+                <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-primary btn-sm rounded-3 d-inline-flex align-items-center">
+                    <i class="fas fa-shield-halved me-1"></i>SOC Console
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Theme Controller Script -->
+    <script>
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        const themeIcon = document.getElementById('themeIcon');
+
+        function updateThemeIcon(theme) {
+            if (theme === 'light') {
+                themeIcon.className = 'fas fa-moon';
+            } else {
+                themeIcon.className = 'fas fa-sun';
+            }
+        }
+
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        updateThemeIcon(currentTheme);
+
+        themeToggleBtn.addEventListener('click', () => {
+            const now = document.documentElement.getAttribute('data-theme') || 'dark';
+            const next = now === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            document.documentElement.style.colorScheme = next;
+            localStorage.setItem('bullymail_theme', next);
+            updateThemeIcon(next);
+        });
+    </script>
+</body>
+</html>

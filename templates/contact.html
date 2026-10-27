@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact — BullyMail SOC</title>
+    <meta name="description" content="Contact Jaya Chandra Vennam, Creator & Lead Developer of BullyMail Threat Intelligence Platform.">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v=2.7.3">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon.png') }}?v=2.7.3">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}?v=2.7.3">
+    <script>
+        (function() {
+            const saved = localStorage.getItem('bullymail_theme');
+            const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.7.3">
+    <style>
+        body {
+            background-color: var(--bg-canvas);
+            color: var(--text-primary);
+            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 30px 16px;
+            position: relative;
+        }
+
+        .contact-page-card {
+            background: var(--bg-surface-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            box-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.85);
+            padding: 30px 28px;
+            max-width: 560px;
+            width: 100%;
+            position: relative;
+            z-index: 10;
+        }
+
+        [data-theme="light"] .contact-page-card {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+        }
+
+        .contact-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 22px;
+        }
+
+        .contact-header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            margin: 0;
+        }
+
+        .contact-header-emoji {
+            font-size: 1.55rem;
+            line-height: 1;
+        }
+
+        .btn-contact-close-icon {
+            background: var(--bg-surface);
+            border: 1px solid var(--neu-rim-subtle);
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            text-decoration: none;
+            box-shadow: var(--neu-btn);
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .btn-contact-close-icon {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.08), -2px -2px 5px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-secondary) !important;
+        }
+
+        .btn-contact-close-icon:hover {
+            color: var(--text-primary) !important;
+            transform: translateY(-1px);
+            box-shadow: var(--neu-btn-hover);
+        }
+
+        .btn-contact-close-icon:active {
+            transform: translateY(1px);
+            box-shadow: var(--neu-btn-pressed) !important;
+        }
+
+        /* Creator Profile Card */
+        .contact-creator-card {
+            background: var(--bg-inset);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 18px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            box-shadow: var(--neu-inset);
+        }
+
+        [data-theme="light"] .contact-creator-card {
+            background: #f5f3ee !important;
+            border: 1px solid rgba(0, 0, 0, 0.06) !important;
+            box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.06), inset -1px -1px 3px rgba(255, 255, 255, 0.5) !important;
+        }
+
+        .creator-info {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .creator-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+            box-shadow: var(--neu-btn);
+        }
+
+        [data-theme="light"] .creator-avatar {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(215, 210, 200, 0.7) !important;
+            box-shadow: 3px 3px 7px rgba(190, 185, 175, 0.35), -3px -3px 7px rgba(255, 255, 255, 0.9) !important;
+        }
+
+        .creator-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.25;
+            margin-bottom: 2px;
+        }
+
+        .creator-role {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.25;
+            margin-bottom: 0;
+        }
+
+        .creator-socials {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .creator-social-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: var(--bg-surface);
+            border: 1px solid var(--neu-rim);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            text-decoration: none;
+            box-shadow: var(--neu-btn);
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .creator-social-btn {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(215, 210, 200, 0.6) !important;
+            box-shadow: 3px 3px 6px rgba(190, 185, 175, 0.35), -3px -3px 6px rgba(255, 255, 255, 0.9) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .creator-social-btn:hover {
+            color: var(--accent-primary) !important;
+            transform: translateY(-1.5px);
+            box-shadow: var(--neu-btn-hover);
+        }
+
+        [data-theme="light"] .creator-social-btn:hover {
+            box-shadow: 4px 4px 10px rgba(185, 180, 170, 0.45), -4px -4px 10px rgba(255, 255, 255, 1) !important;
+            color: #4f46e5 !important;
+        }
+
+        .creator-social-btn:active {
+            transform: translateY(1px);
+            box-shadow: var(--neu-btn-pressed) !important;
+        }
+
+        /* Action Cards */
+        .contact-action-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--neu-rim);
+            border-radius: 16px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 12px;
+            text-decoration: none;
+            color: var(--text-primary);
+            box-shadow: var(--neu-btn);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        [data-theme="light"] .contact-action-card {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.07) !important;
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.06), -3px -3px 8px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .contact-action-card:hover {
+            background: var(--bg-surface-elevated);
+            transform: translateY(-2px);
+            box-shadow: var(--neu-btn-hover);
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .contact-action-card:hover {
+            background: #ffffff !important;
+            border-color: rgba(0, 0, 0, 0.12) !important;
+            box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.09), -4px -4px 12px rgba(255, 255, 255, 0.95) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .contact-action-card:active {
+            transform: translateY(1px);
+            box-shadow: var(--neu-btn-pressed) !important;
+        }
+
+        .contact-action-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .contact-action-emoji {
+            font-size: 1.5rem;
+            line-height: 1;
+            width: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .contact-action-title {
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+            line-height: 1.25;
+        }
+
+        .contact-action-sub {
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+            margin-bottom: 0;
+            line-height: 1.25;
+        }
+
+        .contact-action-sub.font-mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+        }
+
+        .contact-action-arrow {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            font-weight: 700;
+            transition: transform 0.2s ease, color 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .contact-action-card:hover .contact-action-arrow {
+            transform: translate(3px, -3px);
+            color: var(--accent-primary);
+        }
+
+        /* Footer in Card */
+        .contact-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        [data-theme="light"] .contact-card-footer {
+            border-top-color: rgba(0, 0, 0, 0.07);
+        }
+
+        .contact-footer-copy {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .btn-contact-close-action {
+            background: var(--bg-surface-elevated);
+            color: var(--text-primary) !important;
+            font-weight: 600;
+            font-size: 0.88rem;
+            padding: 9px 24px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: var(--neu-btn);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .btn-contact-close-action {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.08), -2px -2px 6px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .btn-contact-close-action:hover {
+            box-shadow: var(--neu-btn-hover);
+            transform: translateY(-1px);
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="light"] .btn-contact-close-action:hover {
+            box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.12), -3px -3px 8px rgba(255, 255, 255, 0.95) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .btn-contact-close-action:active {
+            box-shadow: var(--neu-btn-pressed) !important;
+            transform: translateY(1px);
+        }
+
+        /* Top Theme Toggle */
+        .theme-toggle-fixed {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+        }
+
+        .theme-toggle-btn {
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+            cursor: pointer;
+            box-shadow: var(--neu-flat);
+            transition: all 0.2s ease;
+        }
+
+        .theme-toggle-btn:hover {
+            transform: rotate(15deg) scale(1.05);
+            border-color: var(--accent-primary);
+        }
+
+        @media (max-width: 576px) {
+            .contact-page-card {
+                padding: 24px 18px;
+            }
+            .contact-creator-card {
+                padding: 14px 16px;
+            }
+            .creator-socials {
+                width: 100%;
+                justify-content: flex-start;
+                margin-top: 4px;
+            }
+            .contact-card-footer {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                gap: 14px;
+            }
+            .btn-contact-close-action {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Fixed Theme Toggle -->
+    <div class="theme-toggle-fixed">
+        <button type="button" class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark/light theme" title="Toggle Theme">
+            <i class="fas fa-sun" id="themeIcon"></i>
+        </button>
+    </div>
+
+    <!-- Contact Card -->
+    <div class="contact-page-card">
+        <!-- Header -->
+        <div class="contact-header">
+            <h1 class="contact-header-title">
+                <span class="contact-header-emoji">📫</span> Contact
+            </h1>
+            <a href="{{ url_for('main.index') }}" class="btn-contact-close-icon" aria-label="Close" title="Back to Home">
+                <i class="fas fa-times"></i>
+            </a>
+        </div>
+
+        <!-- Creator Profile Card -->
+        <div class="contact-creator-card">
+            <div class="creator-info">
+                <div class="creator-avatar" aria-hidden="true">
+                    👨‍💻
+                </div>
+                <div>
+                    <div class="creator-name">Jaya Chandra Vennam</div>
+                    <p class="creator-role">Creator &amp; Lead Developer of BullyMail</p>
+                </div>
+            </div>
+            <div class="creator-socials">
+                <a href="https://www.instagram.com/jaya_chandra_v?stkn=Mm1remxkbmtja2pl" target="_blank" rel="noopener noreferrer" class="creator-social-btn" aria-label="Instagram Profile" title="Instagram">
+                    <i class="fab fa-instagram"></i>
+                </a>
+                <a href="https://www.linkedin.com/in/jaya-chandra-vennam/" target="_blank" rel="noopener noreferrer" class="creator-social-btn" aria-label="LinkedIn Profile" title="LinkedIn">
+                    <i class="fab fa-linkedin-in"></i>
+                </a>
+                <a href="https://github.com/jayachandra2003" target="_blank" rel="noopener noreferrer" class="creator-social-btn" aria-label="GitHub Profile" title="GitHub">
+                    <i class="fab fa-github"></i>
+                </a>
+            </div>
+        </div>
+
+        <!-- Action Card: Email Support -->
+        <a href="mailto:bullymail.project@gmail.com" class="contact-action-card">
+            <div class="contact-action-left">
+                <div class="contact-action-emoji" aria-hidden="true">✉️</div>
+                <div>
+                    <div class="contact-action-title">Email Support</div>
+                    <p class="contact-action-sub font-mono">bullymail.project@gmail.com</p>
+                </div>
+            </div>
+            <div class="contact-action-arrow">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+            </div>
+        </a>
+
+        <!-- Action Card: GitHub Repository -->
+        <a href="https://github.com/jayachandra2003/BullyMail-Threat-Intelligence" target="_blank" rel="noopener noreferrer" class="contact-action-card">
+            <div class="contact-action-left">
+                <div class="contact-action-emoji" aria-hidden="true">🐙</div>
+                <div>
+                    <div class="contact-action-title">GitHub Repository</div>
+                    <p class="contact-action-sub">Star project &amp; explore source code</p>
+                </div>
+            </div>
+            <div class="contact-action-arrow">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+            </div>
+        </a>
+
+        <!-- Footer -->
+        <div class="contact-card-footer">
+            <p class="contact-footer-copy">
+                BullyMail &copy; 2026 &bull; Built by Jaya Chandra Vennam
+            </p>
+            <a href="{{ url_for('main.index') }}" class="btn-contact-close-action">
+                Close
+            </a>
+        </div>
+    </div>
+
+    <!-- Theme Controller Script -->
+    <script>
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        const themeIcon = document.getElementById('themeIcon');
+
+        function updateThemeIcon(theme) {
+            if (theme === 'light') {
+                themeIcon.className = 'fas fa-moon';
+            } else {
+                themeIcon.className = 'fas fa-sun';
+            }
+        }
+
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        updateThemeIcon(currentTheme);
+
+        themeToggleBtn.addEventListener('click', () => {
+            const now = document.documentElement.getAttribute('data-theme') || 'dark';
+            const next = now === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            document.documentElement.style.colorScheme = next;
+            localStorage.setItem('bullymail_theme', next);
+            updateThemeIcon(next);
+        });
+    </script>
+</body>
+</html>

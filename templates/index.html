@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BullyMail V2 SOC — Multi-Vector Email Threat Detection Platform</title>
+    <meta name="description" content="BullyMail: Enterprise multi-vector cyberbullying, targeted harassment, and email threat intelligence platform with explainable risk evidence.">
+    <meta property="og:title" content="BullyMail V2 SOC — Multi-Vector Email Threat Detection">
+    <meta property="og:description" content="Hybrid ML + rule-based email threat intelligence and explainable cyberbullying detection platform.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="{{ url_for('static', filename='img/logo.png', _external=True) }}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="BullyMail V2 SOC — Multi-Vector Email Threat Detection">
+    <meta name="twitter:description" content="Hybrid ML + rule-based email threat intelligence and explainable cyberbullying detection platform.">
+    <meta name="twitter:image" content="{{ url_for('static', filename='img/logo.png', _external=True) }}">
+    
+    <!-- Favicon & Apple Touch Icon -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v=2.7.2">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon.png') }}?v=2.7.2">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}?v=2.7.2">
+    
+    <!-- Early 2-State Theme Execution -->
+    <script>
+        (function() {
+            const saved = localStorage.getItem('bullymail_theme');
+            const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
+
+    <!-- Google Fonts: Inter, JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- FontAwesome 6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- BullyMail V2 Core CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=2.7.3">
+    <!-- Theme Core -->
+    <script src="{{ url_for('static', filename='js/core/theme.js') }}?v=2.7.3"></script>
+    
+    <style>
+        .hero-v2-soc {
+            padding: 56px 0 44px;
+            background: transparent;
+            border-bottom: 1px solid var(--neu-rim-subtle);
+            position: relative;
+        }
+
+        .vector-card-hero {
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            border-radius: 20px;
+            padding: 24px;
+            height: 100%;
+            transition: all var(--transition-fast);
+            box-shadow: var(--neu-raised);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .vector-card-hero:hover {
+            border-color: var(--neu-rim);
+            box-shadow: var(--neu-raised-hover);
+            transform: translateY(-2px);
+        }
+
+        .vector-icon-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+            background: var(--bg-inset);
+            box-shadow: var(--neu-inset);
+            border: 1px solid var(--neu-rim-subtle);
+            transition: transform 0.2s ease;
+        }
+
+        .vector-card-hero:hover .vector-icon-circle {
+            transform: scale(1.08);
+        }
+
+        .interactive-demo-card {
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            border-radius: 24px;
+            padding: 32px;
+            box-shadow: var(--neu-raised);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sample-pill-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .sample-pill {
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 7px 16px;
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            box-shadow: var(--neu-btn);
+        }
+
+        .sample-pill:hover {
+            box-shadow: var(--neu-btn-hover);
+            color: var(--accent-primary);
+            transform: translateY(-1px);
+        }
+
+        .sample-pill:active {
+            box-shadow: var(--neu-btn-pressed) !important;
+            transform: translateY(1px);
+        }
+
+        /* Tactile Neumorphic Top Bar */
+        .navbar-soc {
+            background-color: rgba(24, 28, 36, 0.96) !important;
+            background: rgba(24, 28, 36, 0.96) !important;
+            backdrop-filter: blur(14px) !important;
+            -webkit-backdrop-filter: blur(14px) !important;
+            border-bottom: 1px solid var(--neu-rim);
+            box-shadow: 0 4px 20px var(--neu-dark-shadow);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            padding: 18px 0;
+            transition: all var(--transition-base, 0.2s ease);
+        }
+
+        [data-theme="light"] .navbar-soc {
+            background-color: rgba(244, 243, 239, 0.96) !important;
+            background: rgba(244, 243, 239, 0.96) !important;
+            border-bottom: 1px solid rgba(195, 190, 180, 0.5) !important;
+            box-shadow: 0 4px 18px rgba(195, 190, 180, 0.45) !important;
+        }
+
+        .topbar-brand-logo {
+            width: 38px;
+            height: 38px;
+            object-fit: contain;
+            filter: drop-shadow(0 2px 6px rgba(245, 158, 11, 0.45));
+            transition: transform 0.2s ease;
+        }
+
+        .navbar-brand:hover .topbar-brand-logo {
+            transform: scale(1.05);
+        }
+
+        .topbar-brand-name {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            line-height: 1;
+        }
+
+        /* Inset Neumorphic V2 SOC Badge */
+        .topbar-soc-badge {
+            background: #14161d;
+            box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.65), inset -2px -2px 4px rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            color: #818cf8;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 4px 11px;
+            border-radius: 20px;
+            letter-spacing: 0.05em;
+        }
+
+        [data-theme="light"] .topbar-soc-badge {
+            background: #eae8e2;
+            box-shadow: inset 2px 2px 4px rgba(195, 190, 180, 0.6), inset -2px -2px 4px rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.85);
+            color: #d97706;
+        }
+
+        /* Tactile Inset Neumorphic Navigation Dock */
+        .topbar-nav-dock {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 8px;
+            background: #14161d;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 9999px;
+            box-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.75), inset -3px -3px 7px rgba(255, 255, 255, 0.04);
+        }
+
+        [data-theme="light"] .topbar-nav-dock {
+            background: #ebeae4;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: inset 3px 3px 6px rgba(195, 190, 180, 0.65), inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+        }
+
+        .topbar-nav-link {
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            font-weight: 600;
+            padding: 8px 20px !important;
+            border-radius: 9999px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .topbar-nav-link:hover {
+            color: #ffffff;
+            background: #1a1e27;
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.7), -3px -3px 8px rgba(255, 255, 255, 0.05);
+            transform: translateY(-1px);
+        }
+
+        [data-theme="light"] .topbar-nav-link:hover {
+            color: #0f172a;
+            background: #fcfbfa;
+            box-shadow: 2px 2px 6px rgba(195, 190, 180, 0.55), -2px -2px 6px rgba(255, 255, 255, 0.95);
+            transform: translateY(-1px);
+        }
+
+        .topbar-nav-link:active {
+            transform: translateY(1px);
+            box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.6), inset -2px -2px 5px rgba(255, 255, 255, 0.04);
+        }
+
+        [data-theme="light"] .topbar-nav-link:active {
+            box-shadow: inset 2px 2px 5px rgba(195, 190, 180, 0.7), inset -2px -2px 5px rgba(255, 255, 255, 0.9);
+        }
+
+        /* Tactile Raised Theme Toggle */
+        .soc-theme-toggle-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: #1a1e27;
+            box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.7), -4px -4px 10px rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: #fbbf24;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 1rem;
+        }
+
+        [data-theme="light"] .soc-theme-toggle-btn {
+            background: #fcfbfa;
+            box-shadow: 4px 4px 9px rgba(195, 190, 180, 0.58), -4px -4px 9px rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            color: #d97706;
+        }
+
+        .soc-theme-toggle-btn:hover {
+            transform: translateY(-1px) rotate(15deg);
+            box-shadow: 6px 6px 14px rgba(0, 0, 0, 0.8), -6px -6px 14px rgba(255, 255, 255, 0.08);
+        }
+
+        [data-theme="light"] .soc-theme-toggle-btn:hover {
+            box-shadow: 6px 6px 14px rgba(195, 190, 180, 0.7), -6px -6px 14px rgba(255, 255, 255, 1);
+        }
+
+        .soc-theme-toggle-btn:active {
+            transform: translateY(1px);
+            box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.7), inset -3px -3px 6px rgba(255, 255, 255, 0.04);
+        }
+
+        [data-theme="light"] .soc-theme-toggle-btn:active {
+            box-shadow: inset 3px 3px 6px rgba(195, 190, 180, 0.7), inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+        }
+
+        /* Tactile Raised Primary Action Button (Register Organization) */
+        .topbar-action-btn {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: #ffffff !important;
+            font-size: 0.88rem;
+            font-weight: 600;
+            padding: 9px 22px;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            white-space: nowrap;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 4px 4px 12px rgba(79, 70, 229, 0.4), -2px -2px 6px rgba(255, 255, 255, 0.15);
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .topbar-action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 6px 6px 18px rgba(79, 70, 229, 0.55);
+            color: #ffffff;
+        }
+
+        .topbar-action-btn:active {
+            transform: translateY(1px);
+            box-shadow: 2px 2px 6px rgba(79, 70, 229, 0.4);
+        }
+
+        [data-theme="light"] .topbar-action-btn {
+            background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.4) !important;
+            box-shadow: 4px 4px 12px rgba(79, 70, 229, 0.35), -2px -2px 6px rgba(255, 255, 255, 0.9) !important;
+            color: #ffffff !important;
+        }
+
+        [data-theme="light"] .topbar-action-btn:hover {
+            box-shadow: 6px 6px 18px rgba(79, 70, 229, 0.45) !important;
+            color: #ffffff !important;
+        }
+
+        /* Tactile Raised Secondary Action Button (Sign In) */
+        .topbar-secondary-btn {
+            color: var(--text-primary) !important;
+            font-size: 0.88rem;
+            font-weight: 600;
+            padding: 9px 20px;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            white-space: nowrap;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 1px solid var(--neu-rim);
+            background: var(--bg-surface-elevated);
+            box-shadow: var(--neu-btn);
+        }
+
+        .topbar-secondary-btn:hover {
+            box-shadow: var(--neu-btn-hover);
+            transform: translateY(-1px);
+            color: var(--text-primary);
+        }
+
+        .topbar-secondary-btn:active {
+            box-shadow: var(--neu-btn-pressed);
+            transform: translateY(1px);
+        }
+
+        [data-theme="light"] .topbar-secondary-btn {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(255, 255, 255, 0.9) !important;
+            box-shadow: 4px 4px 9px rgba(195, 190, 180, 0.58), -4px -4px 9px rgba(255, 255, 255, 0.95) !important;
+            color: #1c1917 !important;
+        }
+
+        [data-theme="light"] .topbar-secondary-btn:hover {
+            box-shadow: 6px 6px 14px rgba(195, 190, 180, 0.7), -6px -6px 14px rgba(255, 255, 255, 1) !important;
+            color: #1c1917 !important;
+        }
+
+        .navbar-soc .navbar-toggler {
+            border: 1px solid var(--neu-rim);
+            background: var(--bg-surface-elevated);
+            box-shadow: var(--neu-flat);
+            border-radius: 12px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+
+        .navbar-soc .navbar-toggler:hover {
+            box-shadow: var(--neu-btn-hover);
+            transform: translateY(-1px);
+        }
+
+        .navbar-soc .navbar-toggler:focus {
+            box-shadow: var(--neu-btn-pressed);
+            outline: none;
+        }
+
+        .topbar-actions-col {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        @media (min-width: 992px) {
+            .topbar-brand-col {
+                flex: 1 1 0;
+            }
+            .topbar-actions-col {
+                flex: 1 1 0;
+                justify-content: flex-end;
+                gap: 14px;
+            }
+        }
+
+        @media (max-width: 991px) {
+            .topbar-actions-col {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                width: 100%;
+            }
+            .navbar-soc .navbar-collapse {
+                background: var(--bg-surface-elevated);
+                border: 1px solid var(--neu-rim);
+                border-radius: 20px;
+                padding: 18px;
+                margin-top: 10px;
+                box-shadow: var(--neu-raised);
+            }
+            .navbar-soc .topbar-action-btn,
+            .navbar-soc .topbar-secondary-btn {
+                width: 100%;
+                justify-content: center;
+                padding: 10px 16px !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hero-v2-soc {
+                padding: 36px 0 28px;
+            }
+            .hero-v2-soc h1 {
+                font-size: 1.75rem !important;
+            }
+            .interactive-demo-card {
+                padding: 20px 16px;
+                border-radius: 18px;
+            }
+        }
+
+        /* Architecture Breakdown Section Polished Layout */
+        .arch-spec-row {
+            padding: 12px 16px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            transition: all var(--transition-fast);
+        }
+
+        .arch-spec-row:hover {
+            border-color: var(--neu-rim);
+            box-shadow: var(--neu-flat);
+            transform: translateY(-1px);
+        }
+
+        [data-theme="light"] .arch-spec-row {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(195, 190, 180, 0.5) !important;
+        }
+
+        [data-theme="light"] .arch-spec-row:hover {
+            border-color: rgba(195, 190, 180, 0.85) !important;
+            box-shadow: 3px 3px 9px rgba(195, 190, 180, 0.45), -3px -3px 9px rgba(255, 255, 255, 0.9) !important;
+        }
+
+        .arch-icon-orb {
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            background: var(--bg-inset);
+            border: 1px solid var(--border-subtle);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: var(--accent-primary);
+            font-size: 0.78rem;
+            margin-top: 1px;
+        }
+
+        .arch-badge-fixed {
+            min-width: 110px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            padding: 6px 10px;
+            font-size: 0.68rem;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        /* Option 3: Sculpted Inset Neumorphic Sunken Trench */
+        .footer-soc {
+            background-color: #12141a !important;
+            background: #12141a !important;
+            border-top: 1px solid rgba(0, 0, 0, 0.8) !important;
+            box-shadow: inset 0 8px 18px rgba(0, 0, 0, 0.85), inset 0 -2px 6px rgba(255, 255, 255, 0.04) !important;
+            padding: 26px 0 24px;
+            margin-top: 56px;
+            position: relative;
+        }
+
+        [data-theme="light"] .footer-soc {
+            background-color: #eae5dc !important;
+            background: #eae5dc !important;
+            border-top: 2px solid rgba(195, 190, 180, 0.85) !important;
+            box-shadow: inset 0 8px 18px rgba(175, 170, 160, 0.65), inset 0 -3px 8px rgba(255, 255, 255, 0.95) !important;
+        }
+
+        .footer-brand-title {
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+            line-height: 1.2;
+        }
+
+        .footer-soc-badge {
+            background: #0f1117;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: inset 1px 1px 3px rgba(0, 0, 0, 0.6);
+            color: #818cf8;
+            font-size: 0.62rem;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 9999px;
+            letter-spacing: 0.04em;
+        }
+
+        [data-theme="light"] .footer-soc-badge {
+            background: #ded9cf;
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            box-shadow: inset 1px 1px 3px rgba(175, 170, 160, 0.65);
+            color: #64748b;
+        }
+
+        .footer-tagline {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 0;
+            line-height: 1.35;
+        }
+
+        .footer-center-nav {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .footer-sep {
+            display: none !important;
+        }
+
+        .footer-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #1a1e27;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 9999px;
+            padding: 6px 18px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-decoration: none;
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.7), -3px -3px 8px rgba(255, 255, 255, 0.05);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        [data-theme="light"] .footer-link {
+            background: #fbfaf8;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            color: #334155;
+            box-shadow: 3px 3px 8px rgba(175, 170, 160, 0.55), -3px -3px 8px rgba(255, 255, 255, 1);
+        }
+
+        .footer-link:hover {
+            transform: translateY(-1.5px);
+            color: #ffffff;
+            box-shadow: 5px 5px 12px rgba(0, 0, 0, 0.8), -4px -4px 10px rgba(255, 255, 255, 0.08);
+        }
+
+        [data-theme="light"] .footer-link:hover {
+            color: #0f172a;
+            box-shadow: 5px 5px 12px rgba(175, 170, 160, 0.7), -5px -5px 12px rgba(255, 255, 255, 1);
+        }
+
+        .footer-link:active {
+            transform: translateY(1px);
+            box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.7), inset -2px -2px 5px rgba(255, 255, 255, 0.04);
+        }
+
+        [data-theme="light"] .footer-link:active {
+            box-shadow: inset 2px 2px 5px rgba(175, 170, 160, 0.65), inset -2px -2px 5px rgba(255, 255, 255, 0.9);
+        }
+
+        .footer-link-contact {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+            color: #0f172a !important;
+            font-weight: 700 !important;
+            border: 1px solid rgba(255, 255, 255, 0.25) !important;
+            box-shadow: 3px 3px 10px rgba(245, 158, 11, 0.35), -2px -2px 6px rgba(255, 255, 255, 0.08) !important;
+        }
+
+        [data-theme="light"] .footer-link-contact {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.4) !important;
+            box-shadow: 3px 3px 9px rgba(180, 83, 9, 0.4), -2px -2px 7px rgba(255, 255, 255, 0.95) !important;
+        }
+
+        .footer-link-contact:hover {
+            color: #ffffff !important;
+            box-shadow: 5px 5px 14px rgba(217, 119, 6, 0.5), -3px -3px 8px rgba(255, 255, 255, 0.15) !important;
+        }
+
+        .footer-author {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+            line-height: 1.35;
+        }
+
+        .footer-author strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .footer-copyright {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.35;
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 991px) {
+            .footer-soc {
+                padding: 24px 0 20px;
+                margin-top: 40px;
+            }
+            .footer-center-nav {
+                margin: 8px 0;
+            }
+        }
+
+        /* Contact Modal Styles */
+        .contact-modal-dialog {
+            max-width: 560px;
+            margin: 1.75rem auto;
+        }
+
+        .contact-modal-content {
+            background: var(--bg-surface-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            box-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.85);
+            padding: 28px 26px;
+            color: var(--text-primary);
+            position: relative;
+        }
+
+        [data-theme="light"] .contact-modal-content {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+        }
+
+        .contact-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .contact-header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            margin: 0;
+        }
+
+        .contact-header-emoji {
+            font-size: 1.45rem;
+            line-height: 1;
+        }
+
+        .btn-contact-close-icon {
+            background: var(--bg-surface);
+            border: 1px solid var(--neu-rim-subtle);
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            text-decoration: none;
+            box-shadow: var(--neu-btn);
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .btn-contact-close-icon {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.08), -2px -2px 5px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-secondary) !important;
+        }
+
+        .btn-contact-close-icon:hover {
+            color: var(--text-primary) !important;
+            transform: translateY(-1px);
+            box-shadow: var(--neu-btn-hover);
+        }
+
+        .btn-contact-close-icon:active {
+            transform: translateY(1px);
+            box-shadow: var(--neu-btn-pressed) !important;
+        }
+
+        /* Creator Profile Card */
+        .contact-creator-card {
+            background: var(--bg-inset);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 18px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            box-shadow: var(--neu-inset);
+        }
+
+        [data-theme="light"] .contact-creator-card {
+            background: #f5f3ee !important;
+            border: 1px solid rgba(0, 0, 0, 0.06) !important;
+            box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.06), inset -1px -1px 3px rgba(255, 255, 255, 0.5) !important;
+        }
+
+        .creator-info {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .creator-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--bg-surface-elevated);
+            border: 1px solid var(--neu-rim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+            box-shadow: var(--neu-btn);
+        }
+
+        [data-theme="light"] .creator-avatar {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(215, 210, 200, 0.7) !important;
+            box-shadow: 3px 3px 7px rgba(190, 185, 175, 0.35), -3px -3px 7px rgba(255, 255, 255, 0.9) !important;
+        }
+
+        .creator-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.25;
+            margin-bottom: 2px;
+        }
+
+        .creator-role {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.25;
+            margin-bottom: 0;
+        }
+
+        .creator-socials {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .creator-social-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: var(--bg-surface);
+            border: 1px solid var(--neu-rim);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            text-decoration: none;
+            box-shadow: var(--neu-btn);
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .creator-social-btn {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(215, 210, 200, 0.6) !important;
+            box-shadow: 3px 3px 6px rgba(190, 185, 175, 0.35), -3px -3px 6px rgba(255, 255, 255, 0.9) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .creator-social-btn:hover {
+            color: var(--accent-primary) !important;
+            transform: translateY(-1.5px);
+            box-shadow: var(--neu-btn-hover);
+        }
+
+        [data-theme="light"] .creator-social-btn:hover {
+            box-shadow: 4px 4px 10px rgba(185, 180, 170, 0.45), -4px -4px 10px rgba(255, 255, 255, 1) !important;
+            color: #4f46e5 !important;
+        }
+
+        .creator-social-btn:active {
+            transform: translateY(1px);
+            box-shadow: var(--neu-btn-pressed) !important;
+        }
+
+        /* Action Cards */
+        .contact-action-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--neu-rim);
+            border-radius: 16px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 12px;
+            text-decoration: none;
+            color: var(--text-primary);
+            box-shadow: var(--neu-btn);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        [data-theme="light"] .contact-action-card {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.07) !important;
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.06), -3px -3px 8px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .contact-action-card:hover {
+            background: var(--bg-surface-elevated);
+            transform: translateY(-2px);
+            box-shadow: var(--neu-btn-hover);
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .contact-action-card:hover {
+            background: #ffffff !important;
+            border-color: rgba(0, 0, 0, 0.12) !important;
+            box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.09), -4px -4px 12px rgba(255, 255, 255, 0.95) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .contact-action-card:active {
+            transform: translateY(1px);
+            box-shadow: var(--neu-btn-pressed) !important;
+        }
+
+        .contact-action-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .contact-action-emoji {
+            font-size: 1.5rem;
+            line-height: 1;
+            width: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .contact-action-title {
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+            line-height: 1.25;
+        }
+
+        .contact-action-sub {
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+            margin-bottom: 0;
+            line-height: 1.25;
+        }
+
+        .contact-action-sub.font-mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+        }
+
+        .contact-action-arrow {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            font-weight: 700;
+            transition: transform 0.2s ease, color 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .contact-action-card:hover .contact-action-arrow {
+            transform: translate(3px, -3px);
+            color: var(--accent-primary);
+        }
+
+        /* Footer in Modal */
+        .contact-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        [data-theme="light"] .contact-card-footer {
+            border-top-color: rgba(0, 0, 0, 0.07);
+        }
+
+        .contact-footer-copy {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .btn-contact-close-action {
+            background: var(--bg-surface-elevated);
+            color: var(--text-primary) !important;
+            font-weight: 600;
+            font-size: 0.88rem;
+            padding: 9px 24px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: var(--neu-btn);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="light"] .btn-contact-close-action {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.08), -2px -2px 6px rgba(255, 255, 255, 0.8) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .btn-contact-close-action:hover {
+            box-shadow: var(--neu-btn-hover);
+            transform: translateY(-1px);
+            color: var(--text-primary) !important;
+        }
+
+        [data-theme="light"] .btn-contact-close-action:hover {
+            box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.12), -3px -3px 8px rgba(255, 255, 255, 0.95) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .btn-contact-close-action:active {
+            box-shadow: var(--neu-btn-pressed) !important;
+            transform: translateY(1px);
+        }
+
+        /* Legal Modals (Privacy & Terms) */
+        .legal-modal-dialog {
+            max-width: 680px;
+            margin: 1.75rem auto;
+        }
+
+        .legal-modal-content {
+            background: var(--bg-surface-elevated);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            box-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.85);
+            padding: 28px 28px 22px;
+            color: var(--text-primary);
+            position: relative;
+        }
+
+        [data-theme="light"] .legal-modal-content {
+            background: #fcfbfa !important;
+            border: 1px solid rgba(0, 0, 0, 0.08) !important;
+            box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+        }
+
+        .legal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .legal-header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin: 0;
+            letter-spacing: -0.01em;
+        }
+
+        .legal-modal-body {
+            max-height: 52vh;
+            overflow-y: auto;
+            padding: 18px 20px;
+            margin-bottom: 14px;
+            background: var(--bg-inset);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 18px;
+            box-shadow: var(--neu-inset);
+        }
+
+        [data-theme="light"] .legal-modal-body {
+            background: #f5f3ee !important;
+            border: 1px solid rgba(0, 0, 0, 0.06) !important;
+            box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.06), inset -1px -1px 3px rgba(255, 255, 255, 0.5) !important;
+        }
+
+        .legal-section-title {
+            color: var(--text-primary);
+            font-size: 0.98rem;
+            font-weight: 700;
+            margin-top: 14px;
+            margin-bottom: 6px;
+        }
+
+        .legal-section-title:first-child {
+            margin-top: 0;
+        }
+
+        .legal-section-text {
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        .legal-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 16px;
+            border-top: 1px solid var(--neu-rim-subtle);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        [data-theme="light"] .legal-card-footer {
+            border-top-color: rgba(215, 210, 200, 0.55);
+        }
+
+        .legal-footer-copy {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        @media (max-width: 576px) {
+            .contact-modal-content,
+            .legal-modal-content {
+                padding: 22px 18px;
+            }
+            .contact-creator-card {
+                padding: 14px 16px;
+            }
+            .creator-socials {
+                width: 100%;
+                justify-content: flex-start;
+                margin-top: 4px;
+            }
+            .contact-card-footer,
+            .legal-card-footer {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                gap: 14px;
+            }
+            .btn-contact-close-action {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Navigation Bar: Executive Cyber Command Bar -->
+    <nav class="navbar navbar-expand-lg navbar-soc">
+        <div class="container-fluid px-3 px-sm-4 px-lg-5 d-flex align-items-center justify-content-between">
+            <!-- Left: Brand -->
+            <div class="topbar-brand-col d-flex align-items-center">
+                <a class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary-soc m-0" href="/">
+                    <img src="{{ url_for('static', filename='img/logo.png') }}?v=2.7.3" alt="BullyMail Logo" class="topbar-brand-logo" width="38" height="38">
+                    <span class="topbar-brand-name">BullyMail</span>
+                    <span class="badge topbar-soc-badge">V2 SOC</span>
+                </a>
+            </div>
+
+            <!-- Mobile Toggler -->
+            <button class="navbar-toggler border-secondary d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <!-- Right: Actions (Desktop & Mobile Collapse) -->
+            <div class="collapse navbar-collapse justify-content-end" id="navbarContent">
+                <div class="topbar-actions-col flex-column flex-lg-row mt-3 mt-lg-0 w-100 w-lg-auto justify-content-lg-end">
+                    <button type="button" class="soc-theme-toggle-btn" aria-label="Switch theme" title="Switch theme">
+                        <i class="fas fa-sun"></i>
+                    </button>
+                    <a href="/login" class="topbar-secondary-btn text-decoration-none">
+                        <i class="fas fa-right-to-bracket"></i> Sign In
+                    </a>
+                    <a href="/signup" class="topbar-action-btn text-decoration-none">
+                        <i class="fas fa-building-shield"></i> Register Organization
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Header -->
+    <header class="hero-v2-soc text-center">
+        <div class="container position-relative" style="z-index: 2;">
+            <div class="row justify-content-center">
+                <div class="col-lg-9 col-xl-8">
+                    <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill mb-3" style="background: var(--bg-inset); border: 1px solid var(--border-subtle);">
+                        <div class="pulse-dot"></div>
+                        <span class="font-mono text-secondary small fw-semibold" style="font-size: 0.72rem; letter-spacing: 0.05em;">MULTI-VECTOR EMAIL THREAT DETECTION PLATFORM</span>
+                    </div>
+
+                    <h1 class="fw-bold text-primary-soc mb-3" style="font-size: 2.35rem; letter-spacing: -0.02em; line-height: 1.25;">
+                        Multi-Vector Email Threat Detection
+                    </h1>
+                    <p class="text-secondary mb-4 mx-auto" style="max-width: 740px; font-size: 1.02rem; line-height: 1.55;">
+                        BullyMail analyzes email content, links, attachments, and behavioral signals to identify cyberbullying, phishing, malicious URLs, social engineering, and malware risks.
+                    </p>
+
+                    <div class="d-flex justify-content-center gap-3 flex-wrap">
+                        <a href="#demo" class="btn-soc-primary px-4 py-2 text-decoration-none fw-semibold" style="font-size: 0.92rem;">
+                            <i class="fas fa-play me-2"></i> Launch Threat Demo
+                        </a>
+                        <a href="/login" class="btn-soc-secondary px-4 py-2 text-decoration-none fw-semibold" style="font-size: 0.92rem;">
+                            <i class="fas fa-chart-line me-2"></i> Open SOC Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 6 Specialized Threat Vectors Grid -->
+    <section id="vectors" class="py-5" style="background: var(--bg-app);">
+        <div class="container py-2">
+            <div class="text-center mb-4">
+                <h2 class="fw-bold text-primary-soc mb-1" style="font-size: 1.75rem;">Threat Detection Engines</h2>
+                <p class="text-secondary small mb-0" style="font-size: 0.92rem;">Passive multi-layer analysis across text semantics, links, metadata, and static file attachments.</p>
+            </div>
+
+            <div class="row g-3 g-lg-4">
+                <!-- 1. Cyberbullying -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="vector-card-hero">
+                        <div class="d-flex align-items-center gap-2.5 mb-2">
+                            <div class="vector-icon-circle" style="background: rgba(220, 38, 38, 0.12); color: #dc2626;">
+                                <i class="fas fa-user-slash"></i>
+                            </div>
+                            <h6 class="text-primary-soc mb-0 fw-bold" style="font-size: 0.95rem;">Cyberbullying & Harassment</h6>
+                        </div>
+                        <p class="text-secondary small mb-0" style="line-height: 1.45;">Multi-tier rule heuristics separating single personal insults from compounding harassment and physical harm threats.</p>
+                    </div>
+                </div>
+
+                <!-- 2. Phishing -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="vector-card-hero">
+                        <div class="d-flex align-items-center gap-2.5 mb-2">
+                            <div class="vector-icon-circle" style="background: rgba(217, 119, 6, 0.12); color: #d97706;">
+                                <i class="fas fa-fish"></i>
+                            </div>
+                            <h6 class="text-primary-soc mb-0 fw-bold" style="font-size: 0.95rem;">Phishing & Credential Traps</h6>
+                        </div>
+                        <p class="text-secondary small mb-0" style="line-height: 1.45;">Deconstructs credential verification pretexts, urgent account suspension threats, financial extortion, and look-alike brand spoofs.</p>
+                    </div>
+                </div>
+
+                <!-- 3. Link Security -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="vector-card-hero">
+                        <div class="d-flex align-items-center gap-2.5 mb-2">
+                            <div class="vector-icon-circle" style="background: rgba(14, 165, 233, 0.12); color: #0ea5e9;">
+                                <i class="fas fa-link"></i>
+                            </div>
+                            <h6 class="text-primary-soc mb-0 fw-bold" style="font-size: 0.95rem;">Link & URL Security</h6>
+                        </div>
+                        <p class="text-secondary small mb-0" style="line-height: 1.45;">Safe static link parsing flagging raw IP hostnames, URL shorteners, punycode homoglyphs, and deceptive authentication paths.</p>
+                    </div>
+                </div>
+
+                <!-- 4. Domain Impersonation -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="vector-card-hero">
+                        <div class="d-flex align-items-center gap-2.5 mb-2">
+                            <div class="vector-icon-circle" style="background: rgba(16, 185, 129, 0.12); color: #10b981;">
+                                <i class="fas fa-globe"></i>
+                            </div>
+                            <h6 class="text-primary-soc mb-0 fw-bold" style="font-size: 0.95rem;">Look-Alike Domain Spoofing</h6>
+                        </div>
+                        <p class="text-secondary small mb-0" style="line-height: 1.45;">Levenshtein distance calculation against trusted academic and financial baselines to catch typosquatting.</p>
+                    </div>
+                </div>
+
+                <!-- 5. Social Engineering -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="vector-card-hero">
+                        <div class="d-flex align-items-center gap-2.5 mb-2">
+                            <div class="vector-icon-circle" style="background: rgba(168, 85, 247, 0.12); color: #a855f7;">
+                                <i class="fas fa-user-secret"></i>
+                            </div>
+                            <h6 class="text-primary-soc mb-0 fw-bold" style="font-size: 0.95rem;">Social Engineering Vectors</h6>
+                        </div>
+                        <p class="text-secondary small mb-0" style="line-height: 1.45;">Detects institutional authority impersonation, artificial countdown deadlines, intimidation coercion, and suspicious urgency cues.</p>
+                    </div>
+                </div>
+
+                <!-- 6. Attachment & Image Forensics -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="vector-card-hero">
+                        <div class="d-flex align-items-center gap-2.5 mb-2">
+                            <div class="vector-icon-circle" style="background: rgba(236, 72, 153, 0.12); color: #ec4899;">
+                                <i class="fas fa-file-shield"></i>
+                            </div>
+                            <h6 class="text-primary-soc mb-0 fw-bold" style="font-size: 0.95rem;">Static Malware & Forensics</h6>
+                        </div>
+                        <p class="text-secondary small mb-0" style="line-height: 1.45;">Safe static double-extension checks (.pdf.exe), PE header inspection, and passive image EXIF/compression integrity analysis.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Live Demo Console -->
+    <section id="demo" class="py-5" style="background: var(--bg-surface); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);">
+        <div class="container py-2">
+            <div class="row justify-content-center">
+                <div class="col-lg-9 col-xl-8">
+                    <div class="text-center mb-4">
+                        <h2 class="fw-bold text-primary-soc mb-1" style="font-size: 1.75rem;">Live Threat Analysis</h2>
+                        <p class="text-secondary small mb-0">Test email messages against live detection engines to inspect real-time multi-vector decomposition and Explainable AI evidence.</p>
+                    </div>
+
+                    <div class="interactive-demo-card">
+                        <!-- Quick Sample Presets -->
+                        <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+                            <span class="text-muted small fw-semibold me-1" style="font-size: 0.76rem;">SAMPLE PRESETS:</span>
+                            <div class="sample-pill-group">
+                                <button type="button" class="sample-pill" onclick="loadDemoSample('bullying')">Cyberbullying Harassment</button>
+                                <button type="button" class="sample-pill" onclick="loadDemoSample('single')">Single Insult</button>
+                                <button type="button" class="sample-pill" onclick="loadDemoSample('phishing')">Phishing & Credential</button>
+                                <button type="button" class="sample-pill" onclick="loadDemoSample('clean')">Clean Academic Email</button>
+                            </div>
+                        </div>
+
+                        <form id="formLiveDemo">
+                            <div class="mb-3">
+                                <label class="form-label text-muted small fw-semibold mb-1" style="font-size: 0.74rem;">TEST EMAIL MESSAGE CONTENT</label>
+                                <textarea class="form-control soc-input" id="demoEmailInput" rows="4" placeholder="Paste or type test email content here..." style="font-size: 0.88rem; line-height: 1.45;">Your recent submission demonstrates a complete lack of understanding and you're worthless. Furthermore, your student account has been locked. Verify your password at http://paypa1.com/login within 24 hours.</textarea>
+                            </div>
+                            <button type="submit" class="btn-soc-primary w-100 py-2.5 fw-semibold" id="btnLiveDemo" style="font-size: 0.92rem;">
+                                <i class="fas fa-shield-virus me-2"></i> Inspect Live Threat Vectors
+                            </button>
+                        </form>
+
+                        <div id="demoResultBox" class="mt-4" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Breakdown Section -->
+    <section id="architecture" class="py-5" style="background: var(--bg-app);">
+        <div class="container py-2">
+            <div class="text-center mb-4">
+                <h2 class="fw-bold text-primary-soc mb-1" style="font-size: 1.75rem;">Detection Architecture & Severity Model</h2>
+                <p class="text-secondary small mb-0" style="max-width: 680px; margin: 0 auto;">Combining deterministic rule engines with statistical NLP classifiers and passive forensic analyzers for low false-positive tolerance.</p>
+            </div>
+
+            <div class="row g-4 align-items-stretch">
+                <!-- Left: Detection & Decision Pipeline -->
+                <div class="col-lg-6">
+                    <div class="soc-panel p-4 h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <h5 class="text-primary-soc mb-3 d-flex align-items-center gap-2 fw-bold" style="font-size: 1.05rem;">
+                                <i class="fas fa-layer-group text-accent"></i> Detection & Decision Pipeline
+                            </h5>
+                            <div class="d-flex flex-column gap-2.5">
+                                <div class="arch-spec-row d-flex align-items-start gap-2.5">
+                                    <span class="arch-icon-orb"><i class="fas fa-bolt"></i></span>
+                                    <div class="small">
+                                        <strong class="text-primary-soc">Deterministic Rule Engine:</strong>
+                                        <span class="text-secondary">High-precision keyword and pattern matching for severe profanity, physical violence threats, and credential theft triggers.</span>
+                                    </div>
+                                </div>
+                                <div class="arch-spec-row d-flex align-items-start gap-2.5">
+                                    <span class="arch-icon-orb"><i class="fas fa-brain"></i></span>
+                                    <div class="small">
+                                        <strong class="text-primary-soc">Statistical NLP Classification:</strong>
+                                        <span class="text-secondary">TF-IDF feature extraction with calibrated Machine Learning models for subtle semantic aggression.</span>
+                                    </div>
+                                </div>
+                                <div class="arch-spec-row d-flex align-items-start gap-2.5">
+                                    <span class="arch-icon-orb"><i class="fas fa-magnifying-glass-chart"></i></span>
+                                    <div class="small">
+                                        <strong class="text-primary-soc">Explainable AI (XAI):</strong>
+                                        <span class="text-secondary">Generates human-interpretable evidence summaries linking triggered indicators directly to risk categories.</span>
+                                    </div>
+                                </div>
+                                <div class="arch-spec-row d-flex align-items-start gap-2.5">
+                                    <span class="arch-icon-orb"><i class="fas fa-shield-virus"></i></span>
+                                    <div class="small">
+                                        <strong class="text-primary-soc">Passive Forensic Inspection:</strong>
+                                        <span class="text-secondary">Safe URL analysis without outbound connection risks, and memory-only static attachment header parsing.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Severity Classification Tiers -->
+                <div class="col-lg-6">
+                    <div class="soc-panel p-4 h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <h5 class="text-primary-soc mb-3 d-flex align-items-center gap-2 fw-bold" style="font-size: 1.05rem;">
+                                <i class="fas fa-shield-halved text-accent"></i> Severity Classification Tiers
+                            </h5>
+                            <div class="d-flex flex-column gap-2.5">
+                                <div class="arch-spec-row d-flex align-items-center gap-3">
+                                    <span class="badge soc-badge-critical arch-badge-fixed">CRITICAL RISK</span>
+                                    <span class="text-secondary small">Physical violence threats, executable malware payloads</span>
+                                </div>
+                                <div class="arch-spec-row d-flex align-items-center gap-3">
+                                    <span class="badge soc-badge-high arch-badge-fixed">HIGH RISK</span>
+                                    <span class="text-secondary small">Compounding harassment, credential phishing traps</span>
+                                </div>
+                                <div class="arch-spec-row d-flex align-items-center gap-3">
+                                    <span class="badge soc-badge-medium arch-badge-fixed">MEDIUM RISK</span>
+                                    <span class="text-secondary small">Single targeted insult, suspicious URL shorteners</span>
+                                </div>
+                                <div class="arch-spec-row d-flex align-items-center gap-3">
+                                    <span class="badge soc-badge-safe arch-badge-fixed">LOW / CLEAN</span>
+                                    <span class="text-secondary small">Legitimate academic and administrative communications</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer: Option 3 Sculpted Inset Neumorphic Sunken Trench -->
+    <footer class="footer-soc">
+        <div class="container">
+            <div class="row align-items-center gy-3 gy-lg-0 justify-content-between">
+                <!-- Left: Brand & Tagline -->
+                <div class="col-lg-4 text-center text-lg-start">
+                    <div class="d-flex align-items-center gap-2 justify-content-center justify-content-lg-start mb-1">
+                        <img src="{{ url_for('static', filename='img/logo.png') }}?v=2.7.3" alt="BullyMail Logo" width="24" height="24" style="object-fit: contain; filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.4));">
+                        <span class="footer-brand-title">BullyMail V2 SOC</span>
+                        <span class="badge footer-soc-badge font-mono">THREAT INTELLIGENCE</span>
+                    </div>
+                    <p class="footer-tagline">
+                        Multi-Vector Email Threat Intelligence Platform
+                    </p>
+                </div>
+                
+                <!-- Center: Navigation Links -->
+                <div class="col-lg-4 text-center">
+                    <nav class="footer-center-nav" aria-label="Footer Navigation">
+                        <a href="/privacy" data-bs-toggle="modal" data-bs-target="#privacyModal" class="footer-link">Privacy Policy</a>
+                        <a href="/terms" data-bs-toggle="modal" data-bs-target="#termsModal" class="footer-link">Terms of Service</a>
+                        <a href="/contact" data-bs-toggle="modal" data-bs-target="#contactModal" class="footer-link footer-link-contact">
+                            <i class="fas fa-envelope me-1.5"></i>Contact
+                        </a>
+                    </nav>
+                </div>
+
+                <!-- Right: Built by & Copyright -->
+                <div class="col-lg-4 text-center text-lg-end">
+                    <p class="footer-author">
+                        Built by <strong>Jaya Chandra Vennam</strong>
+                    </p>
+                    <p class="footer-copyright">
+                        &copy; 2026 All rights reserved.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Privacy Policy Modal -->
+    <div class="modal fade" id="privacyModal" tabindex="-1" aria-labelledby="privacyModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered legal-modal-dialog">
+            <div class="modal-content legal-modal-content">
+                <!-- Header -->
+                <div class="legal-header">
+                    <h2 class="legal-header-title" id="privacyModalLabel">
+                        <i class="fas fa-user-shield text-primary"></i> Privacy Policy
+                    </h2>
+                    <button type="button" class="btn-contact-close-icon" data-bs-dismiss="modal" aria-label="Close" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <p class="text-secondary small mb-3">Effective Date: September 2026</p>
+
+                <div class="legal-modal-body">
+                    <h3 class="legal-section-title">1. Information We Collect</h3>
+                    <p class="legal-section-text">BullyMail processes email headers, text snippets, and uploaded security telemetry submitted for cyberbullying and threat intelligence analysis. User authentication records include username, institutional email address, and role assignments.</p>
+
+                    <h3 class="legal-section-title">2. Data Usage &amp; Confidentiality</h3>
+                    <p class="legal-section-text">Submitted email telemetry is processed strictly for risk scoring, threat classification, and explainable evidence extraction. We do not sell, rent, or distribute ingested data to third-party advertisers.</p>
+
+                    <h3 class="legal-section-title">3. Security Controls &amp; Encryption</h3>
+                    <p class="legal-section-text">All stored operational credentials and mail server credentials are encrypted at rest using AES-128-CBC + HMAC-SHA256 (Fernet master keys). Session cookies are protected via HttpOnly and SameSite attributes.</p>
+
+                    <h3 class="legal-section-title">4. Inquiries &amp; Security Contact</h3>
+                    <p class="legal-section-text">For privacy questions, data governance inquiries, or compliance support, contact <a href="mailto:bullymail.project@gmail.com" class="text-accent text-decoration-none">bullymail.project@gmail.com</a> or open our <a href="#" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#contactModal" class="text-accent text-decoration-none">Contact Desk</a>.</p>
+                </div>
+
+                <!-- Footer -->
+                <div class="legal-card-footer">
+                    <p class="legal-footer-copy">
+                        BullyMail &copy; 2026 &bull; Built by Jaya Chandra Vennam
+                    </p>
+                    <button type="button" class="btn-contact-close-action" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Terms & Conditions Modal -->
+    <div class="modal fade" id="termsModal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered legal-modal-dialog">
+            <div class="modal-content legal-modal-content">
+                <!-- Header -->
+                <div class="legal-header">
+                    <h2 class="legal-header-title" id="termsModalLabel">
+                        <i class="fas fa-file-contract text-primary"></i> Terms &amp; Conditions
+                    </h2>
+                    <button type="button" class="btn-contact-close-icon" data-bs-dismiss="modal" aria-label="Close" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <p class="text-secondary small mb-3">Effective Date: September 2026</p>
+
+                <div class="legal-modal-body">
+                    <h3 class="legal-section-title">1. Authorized Institutional Use</h3>
+                    <p class="legal-section-text">BullyMail Threat Intelligence Platform is designed for authorized SOC operators, cybersecurity analysts, and academic institutions. Unauthorized automated access, credential sharing, or malicious ingestion is strictly prohibited.</p>
+
+                    <h3 class="legal-section-title">2. Machine Learning &amp; Threat Telemetry Disclaimers</h3>
+                    <p class="legal-section-text">Automated risk scores and explainable threat evidence are generated via calibrated machine learning classifiers and multi-vector heuristic rules. Security analysts should review high-severity incidents prior to taking disciplinary or administrative action.</p>
+
+                    <h3 class="legal-section-title">3. System Availability</h3>
+                    <p class="legal-section-text">The platform is provided "as is" with enterprise availability features. Maintenance windows and background model retraining operations may occur periodically.</p>
+
+                    <h3 class="legal-section-title">4. Inquiries &amp; Legal Contact</h3>
+                    <p class="legal-section-text">For inquiries regarding platform terms, operational acceptable use, or service access agreements, contact <a href="mailto:bullymail.project@gmail.com" class="text-accent text-decoration-none">bullymail.project@gmail.com</a> or open our <a href="#" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#contactModal" class="text-accent text-decoration-none">Contact Desk</a>.</p>
+                </div>
+
+                <!-- Footer -->
+                <div class="legal-card-footer">
+                    <p class="legal-footer-copy">
+                        BullyMail &copy; 2026 &bull; Built by Jaya Chandra Vennam
+                    </p>
+                    <button type="button" class="btn-contact-close-action" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact Modal -->
+    <div class="modal fade" id="contactModal" tabindex="-1" aria-labelledby="contactModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered contact-modal-dialog">
+            <div class="modal-content contact-modal-content">
+                <!-- Header -->
+                <div class="contact-header">
+                    <h2 class="contact-header-title" id="contactModalLabel">
+                        <span class="contact-header-emoji">📫</span> Contact
+                    </h2>
+                    <button type="button" class="btn-contact-close-icon" data-bs-dismiss="modal" aria-label="Close" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Creator Profile Card -->
+                <div class="contact-creator-card">
+                    <div class="creator-info">
+                        <div class="creator-avatar" aria-hidden="true">
+                            👨‍💻
+                        </div>
+                        <div>
+                            <div class="creator-name">Jaya Chandra Vennam</div>
+                            <p class="creator-role">Creator &amp; Lead Developer of BullyMail</p>
+                        </div>
+                    </div>
+                    <div class="creator-socials">
+                        <a href="https://www.instagram.com/jaya_chandra_v?stkn=Mm1remxkbmtja2pl" target="_blank" rel="noopener noreferrer" class="creator-social-btn" aria-label="Instagram Profile" title="Instagram">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                        <a href="https://www.linkedin.com/in/jaya-chandra-vennam/" target="_blank" rel="noopener noreferrer" class="creator-social-btn" aria-label="LinkedIn Profile" title="LinkedIn">
+                            <i class="fab fa-linkedin-in"></i>
+                        </a>
+                        <a href="https://github.com/jayachandra2003" target="_blank" rel="noopener noreferrer" class="creator-social-btn" aria-label="GitHub Profile" title="GitHub">
+                            <i class="fab fa-github"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Action Card: Email Support -->
+                <a href="mailto:bullymail.project@gmail.com" class="contact-action-card">
+                    <div class="contact-action-left">
+                        <div class="contact-action-emoji" aria-hidden="true">✉️</div>
+                        <div>
+                            <div class="contact-action-title">Email Support</div>
+                            <p class="contact-action-sub font-mono">bullymail.project@gmail.com</p>
+                        </div>
+                    </div>
+                    <div class="contact-action-arrow">
+                        <i class="fas fa-arrow-up-right-from-square"></i>
+                    </div>
+                </a>
+
+                <!-- Action Card: GitHub Repository -->
+                <a href="https://github.com/jayachandra2003/BullyMail-Threat-Intelligence" target="_blank" rel="noopener noreferrer" class="contact-action-card">
+                    <div class="contact-action-left">
+                        <div class="contact-action-emoji" aria-hidden="true">🐙</div>
+                        <div>
+                            <div class="contact-action-title">GitHub Repository</div>
+                            <p class="contact-action-sub">Star project &amp; explore source code</p>
+                        </div>
+                    </div>
+                    <div class="contact-action-arrow">
+                        <i class="fas fa-arrow-up-right-from-square"></i>
+                    </div>
+                </a>
+
+                <!-- Footer -->
+                <div class="contact-card-footer">
+                    <p class="contact-footer-copy">
+                        BullyMail &copy; 2026 &bull; Built by Jaya Chandra Vennam
+                    </p>
+                    <button type="button" class="btn-contact-close-action" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function loadDemoSample(type) {
+            const input = document.getElementById('demoEmailInput');
+            if (type === 'bullying') {
+                input.value = "Your recent submission is a complete failure and you are a useless student. You should drop out immediately.";
+            } else if (type === 'single') {
+                input.value = "idiot";
+            } else if (type === 'phishing') {
+                input.value = "URGENT: Your account has been suspended due to suspicious activity. Verify your password at http://paypa1-security.com/login within 24 hours.";
+            } else if (type === 'clean') {
+                input.value = "Dear Students, the guidelines for Assignment 2 on Graph Algorithms have been posted on the portal. Office hours are on Thursday at 2 PM.";
+            }
+        }
+
+        document.getElementById('formLiveDemo').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = document.getElementById('demoEmailInput').value;
+            const btn = document.getElementById('btnLiveDemo');
+            const resBox = document.getElementById('demoResultBox');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Inspecting Multi-Vector Telemetry...';
+            resBox.style.display = 'block';
+            resBox.innerHTML = '<div class="text-center p-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Running multi-vector analysis engines...</div>';
+            
+            try {
+                const res = await fetch('/api/quick-demo-analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email_text: text })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    const r = data.result;
+                    const rawRisk = r.overall_risk_level || 'LOW';
+                    const risk = escapeHtml(rawRisk);
+                    const conf = Math.round((r.overall_confidence || 0) * 100);
+
+                    let badgeClass = 'soc-badge-safe';
+                    if (risk === 'CRITICAL') badgeClass = 'soc-badge-critical';
+                    else if (risk === 'HIGH') badgeClass = 'soc-badge-high';
+                    else if (risk === 'MEDIUM') badgeClass = 'soc-badge-medium';
+                    
+                    let evHtml = '';
+                    if (r.evidence && r.evidence.length > 0) {
+                        evHtml = r.evidence.map(ev => `
+                            <div class="p-2 mb-2 border border-subtle rounded" style="background: var(--bg-surface);">
+                                <span class="badge ${badgeClass}" style="font-size: 0.65rem;">${escapeHtml(ev.category)}</span>
+                                <strong class="ms-2 text-primary-soc">${escapeHtml(ev.title)}</strong>
+                                <div class="text-secondary small mt-1" style="font-size: 0.8rem;">${escapeHtml(ev.details)}</div>
+                            </div>
+                        `).join('');
+                    } else {
+                        evHtml = '<div class="text-success small p-2"><i class="fas fa-check-circle me-1"></i> No threat indicators detected across any analysis vector.</div>';
+                    }
+                    
+                    resBox.innerHTML = `
+                        <div class="soc-panel p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="mb-0 text-primary-soc" style="font-size: 1rem;"><i class="fas fa-shield-alt text-accent me-2"></i>Threat Inspection Result</h5>
+                                <span class="badge ${badgeClass}">${risk} THREAT LEVEL (${conf}%)</span>
+                            </div>
+                            <div class="row text-center g-2 mb-3">
+                                <div class="col-4 p-2 soc-panel">
+                                    <small class="text-muted font-mono" style="font-size: 0.72rem;">Bullying</small>
+                                    <div class="fw-bold ${r.bullying_analysis.is_bullying ? 'text-danger' : 'text-success'}" style="font-size: 0.84rem;">
+                                        ${r.bullying_analysis.is_bullying ? '● DETECTED' : '✓ NOT DETECTED'}
+                                    </div>
+                                </div>
+                                <div class="col-4 p-2 soc-panel">
+                                    <small class="text-muted font-mono" style="font-size: 0.72rem;">Phishing</small>
+                                    <div class="fw-bold ${r.phishing_analysis.risk_level !== 'LOW' ? 'text-danger' : 'text-success'}" style="font-size: 0.84rem;">
+                                        ${r.phishing_analysis.risk_level === 'LOW' ? '✓ NOT DETECTED' : '● ' + escapeHtml(r.phishing_analysis.risk_level)}
+                                    </div>
+                                </div>
+                                <div class="col-4 p-2 soc-panel">
+                                    <small class="text-muted font-mono" style="font-size: 0.72rem;">Links</small>
+                                    <div class="fw-bold ${r.url_analysis.suspicious_count > 0 ? 'text-warning' : 'text-success'}" style="font-size: 0.84rem;">
+                                        ${r.url_analysis.suspicious_count > 0 ? '⚠ ' + parseInt(r.url_analysis.suspicious_count) + ' RISKY' : '✓ SAFE'}
+                                    </div>
+                                </div>
+                            </div>
+                            <h6 class="text-primary-soc small fw-bold mb-2">Explainable AI Evidence:</h6>
+                            ${evHtml}
+                        </div>
+                    `;
+                }
+            } catch (err) {
+                resBox.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-shield-virus me-2"></i> Inspect Live Threat Vectors';
+            }
+        });
+    </script>
+</body>
+</html>
